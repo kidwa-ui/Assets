@@ -1,0 +1,50 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #07090f;
+  --bg-panel: #0b1220;
+  --bg-card: #0f1828;
+  --border: #16243a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg-primary);
+  color: #cdd5e0;
+  font-family: 'IBM Plex Sans Thai', 'IBM Plex Sans', system-ui, sans-serif;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #16243a; border-radius: 2px; }
+
+/* Input base */
+input, select, textarea {
+  font-family: inherit;
+  font-size: 13px;
+  background: #060c18;
+  border: 0.5px solid #16243a;
+  color: #cdd5e0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  outline: none;
+  width: 100%;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: #2563eb;
+}
+input:disabled, select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+input[type="number"] {
+  text-align: right;
+}
