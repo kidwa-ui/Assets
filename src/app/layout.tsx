@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Personal Ledger",
   description: "บันทึกการเงินส่วนบุคคล แบบ double-entry",
