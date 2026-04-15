@@ -86,7 +86,7 @@ export function useFinance() {
     setLoading(false);
   }, []);
 
-  const addTransaction = async (txn: Omit<Transaction, "id">): Promise<{ error: unknown }> => {
+  const addTransaction = async (txn: Omit<Transaction, "id">): Promise<{ error: { message: string } | null }> => {
     if (!userId) return { error: null };
     const { data, error } = await supabase.from("transactions").insert({ ...txn, user_id: userId }).select().single();
     if (!error && data) setTxns(p => [...p, data]);
@@ -98,7 +98,7 @@ export function useFinance() {
     setTxns(p => p.filter(t => t.id !== id));
   };
 
-  const addCCCard = async (card: Omit<CCCard, "id">): Promise<{ error: unknown }> => {
+  const addCCCard = async (card: Omit<CCCard, "id">): Promise<{ error: { message: string } | null }> => {
     if (!userId) return { error: null };
     const { data, error } = await supabase.from("cc_cards").insert({ ...card, user_id: userId }).select().single();
     if (!error && data) setCCCards(p => [...p, data]);
@@ -129,7 +129,7 @@ export function useFinance() {
     if (data) setCCStatements(p => [data, ...p]);
   };
 
-  const addSchedule = async (sched: Omit<Schedule, "id">): Promise<{ error: unknown }> => {
+  const addSchedule = async (sched: Omit<Schedule, "id">): Promise<{ error: { message: string } | null }> => {
     if (!userId) return { error: null };
     const { data, error } = await supabase.from("schedules").insert({ ...sched, user_id: userId }).select().single();
     if (!error && data) {
