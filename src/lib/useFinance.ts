@@ -8,6 +8,7 @@ export interface CCCard {
   name: string;
   account_code: string;
   bank_id: string;
+  card_type: string; // "credit" | "bnpl"
 }
 
 export interface CCStatement {
@@ -79,11 +80,14 @@ export function useFinance() {
   }, []);
 
   useEffect(() => {
-    const dynamicAccounts = Object.fromEntries(
+    const bankDyn = Object.fromEntries(
       userBanks.map(b => [b.account_code, { name: b.name, type: "asset" as const, normal: "debit" as const, subtype: "current" as const }])
     );
-    setSummary(calcSummary(txns, dynamicAccounts));
-  }, [txns, userBanks]);
+    const cardDyn = Object.fromEntries(
+      ccCards.map(c => [c.account_code, { name: c.name, type: "liability" as const, normal: "credit" as const, subtype: "current" as const }])
+    );
+    setSummary(calcSummary(txns, { ...bankDyn, ...cardDyn }));
+  }, [txns, userBanks, ccCards]);
 
   const loadAll = useCallback(async (uid: string) => {
     setLoading(true);
@@ -131,11 +135,23 @@ export function useFinance() {
     setUserBanks(p => p.filter(b => b.id !== id));
   };
 
-  const addCCCard = async (card: Omit<CCCard, "id">): Promise<{ error: { message: string } | null }> => {
-    if (!userId) return { error: null };
-    const { data, error } = await supabase.from("cc_cards").insert({ ...card, user_id: userId }).select().single();
-    if (!error && data) setCCCards(p => [...p, data]);
-    return { error };
+  const addCCCard = async (card: { name: string; card_type: string; bank_id: string }): Promise<{ card?: CCCard; error?: { message: string } }> => {
+    if (!userId) return {};
+    // Auto-assign account code: 2111-2149 for credit, 2151-2189 for bnpl
+    const rangeStart = card.card_type === "bnpl" ? 2151 : 2111;
+    const rangeEnd   = card.card_type === "bnpl" ? 2189 : 2149;
+    const existing = ccCards
+      .filter(c => c.card_type === card.card_type)
+      .map(c => parseInt(c.account_code))
+      .filter(n => !isNaN(n));
+    const next = existing.length > 0 ? Math.max(...existing) + 1 : rangeStart;
+    const account_code = String(Math.min(next, rangeEnd));
+    const { data, error } = await supabase
+      .from("cc_cards")
+      .insert({ ...card, account_code, user_id: userId })
+      .select().single();
+    if (!error && data) { setCCCards(p => [...p, data]); return { card: data }; }
+    return { error: error ? { message: error.message } : { message: "Unknown error" } };
   };
 
   const deleteCCCard = async (id: string) => {
@@ -155,7 +171,7 @@ export function useFinance() {
       await addTransaction({ date: params.stmtDate, description: `ดอกเบี้ย ${params.cardName} (${params.stmtDate})`, dr_account: "5510", cr_account: params.cardAcct, dr_name: "ดอกเบี้ยจ่าย", cr_name: params.cardName, amount: diff, is_system: true });
     }
     if (params.paidAmount > 0.5) {
-      await addTransaction({ date: params.paidDate, description: `ชำระ ${params.cardName} (stmt ${params.stmtDate})`, dr_account: params.cardAcct, cr_account: "1120", dr_name: params.cardName, cr_name: params.bankName, amount: params.paidAmount, is_system: true });
+      await addTransaction({ date: params.paidDate, description: `ชำระ ${params.cardName} (stmt ${params.stmtDate})`, dr_account: params.cardAcct, cr_account: params.bankAcct, dr_name: params.cardName, cr_name: params.bankName, amount: params.paidAmount, is_system: true });
     }
 
     const { data } = await supabase.from("cc_statements").insert({ user_id: userId, card_id: params.cardId, statement_date: params.stmtDate, statement_balance: params.stmtBalance, interest_amount: Math.max(0, diff), paid_amount: params.paidAmount, paid_date: params.paidDate }).select().single();
