@@ -68,8 +68,8 @@ export function buildBalances(txns: Transaction[]): Balances {
   return b;
 }
 
-export function netBal(b: Balances, code: string): number {
-  const a = COA[code];
+export function netBal(b: Balances, code: string, extraCOA: Record<string, Account> = {}): number {
+  const a = COA[code] ?? extraCOA[code];
   if (!a) return 0;
   const raw = b[code] || 0;
   return a.normal === "debit" ? raw : -raw;
@@ -88,18 +88,20 @@ export interface Summary {
   balanced: boolean;
 }
 
-export function calcSummary(txns: Transaction[]): Summary {
+export function calcSummary(txns: Transaction[], dynamicAccounts: Record<string, Account> = {}): Summary {
+  const effectiveCOA = { ...COA, ...dynamicAccounts };
   const b = buildBalances(txns);
+  const nb = (code: string) => netBal(b, code, dynamicAccounts);
   const byType = (t: AccountType) =>
-    Object.entries(COA).filter(([, v]) => v.type === t).map(([k]) => k);
-  const sum = (codes: string[]) => codes.reduce((s, c) => s + netBal(b, c), 0);
+    Object.entries(effectiveCOA).filter(([, v]) => v.type === t).map(([k]) => k);
+  const sum = (codes: string[]) => codes.reduce((s, c) => s + nb(c), 0);
 
   const totalAssets = sum(byType("asset"));
   const totalLiab   = sum(byType("liability"));
   const totalInc    = sum(byType("income"));
   const totalExp    = sum(byType("expense"));
   const netIncome   = totalInc - totalExp;
-  const openingEquity = netBal(b, "3100") + netBal(b, "3200");
+  const openingEquity = nb("3100") + nb("3200");
   const totalEquity = openingEquity + netIncome;
   const diff = totalAssets - totalLiab - totalEquity;
 

@@ -48,10 +48,19 @@ export interface QueueItem {
   schedule?: Schedule;
 }
 
+export interface UserBank {
+  id: string;
+  name: string;
+  type: string;
+  account_code: string;
+}
+
 export function useFinance() {
   const supabase = createClient();
   const [userId, setUserId] = useState<string | null>(null);
+  const [userCreatedAt, setUserCreatedAt] = useState<string | null>(null);
   const [txns, setTxns] = useState<Transaction[]>([]);
+  const [userBanks, setUserBanks] = useState<UserBank[]>([]);
   const [ccCards, setCCCards] = useState<CCCard[]>([]);
   const [ccStatements, setCCStatements] = useState<CCStatement[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -61,24 +70,33 @@ export function useFinance() {
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) { setUserId(user.id); loadAll(user.id); }
+      if (user) {
+        setUserId(user.id);
+        setUserCreatedAt(user.created_at ? user.created_at.slice(0, 10) : null);
+        loadAll(user.id);
+      }
     });
   }, []);
 
   useEffect(() => {
-    setSummary(calcSummary(txns));
-  }, [txns]);
+    const dynamicAccounts = Object.fromEntries(
+      userBanks.map(b => [b.account_code, { name: b.name, type: "asset" as const, normal: "debit" as const, subtype: "current" as const }])
+    );
+    setSummary(calcSummary(txns, dynamicAccounts));
+  }, [txns, userBanks]);
 
   const loadAll = useCallback(async (uid: string) => {
     setLoading(true);
-    const [t, c, s, sc, q] = await Promise.all([
+    const [t, ub, c, s, sc, q] = await Promise.all([
       supabase.from("transactions").select("*").eq("user_id", uid).order("date", { ascending: true }),
+      supabase.from("user_banks").select("*").eq("user_id", uid).order("created_at", { ascending: true }),
       supabase.from("cc_cards").select("*").eq("user_id", uid),
       supabase.from("cc_statements").select("*").eq("user_id", uid).order("statement_date", { ascending: false }),
       supabase.from("schedules").select("*").eq("user_id", uid).eq("is_active", true),
       supabase.from("queue_items").select("*, schedule:schedules(*)").eq("user_id", uid).order("due_date"),
     ]);
     if (t.data) setTxns(t.data.map(r => ({ ...r, dr_account: r.dr_account, cr_account: r.cr_account })));
+    if (ub.data) setUserBanks(ub.data);
     if (c.data) setCCCards(c.data);
     if (s.data) setCCStatements(s.data);
     if (sc.data) setSchedules(sc.data);
@@ -96,6 +114,21 @@ export function useFinance() {
   const deleteTransaction = async (id: string) => {
     await supabase.from("transactions").delete().eq("id", id);
     setTxns(p => p.filter(t => t.id !== id));
+  };
+
+  const addUserBank = async (name: string, type: string): Promise<{ bank?: UserBank; error?: { message: string } }> => {
+    if (!userId) return {};
+    const existingCodes = userBanks.map(b => parseInt(b.account_code)).filter(n => !isNaN(n));
+    const next = existingCodes.length > 0 ? Math.max(...existingCodes) + 1 : 1121;
+    const account_code = String(Math.min(next, 1199));
+    const { data, error } = await supabase.from("user_banks").insert({ user_id: userId, name, type, account_code }).select().single();
+    if (!error && data) { setUserBanks(p => [...p, data]); return { bank: data }; }
+    return { error: error ? { message: error.message } : { message: "Unknown error" } };
+  };
+
+  const deleteUserBank = async (id: string) => {
+    await supabase.from("user_banks").delete().eq("id", id);
+    setUserBanks(p => p.filter(b => b.id !== id));
   };
 
   const addCCCard = async (card: Omit<CCCard, "id">): Promise<{ error: { message: string } | null }> => {
@@ -203,7 +236,9 @@ export function useFinance() {
   };
 
   return {
-    loading, userId, summary, txns, ccCards, ccStatements, schedules, queueItems,
+    loading, userId, userCreatedAt, summary, txns,
+    userBanks, addUserBank, deleteUserBank,
+    ccCards, ccStatements, schedules, queueItems,
     addTransaction, deleteTransaction,
     addCCCard, deleteCCCard, syncCCStatement,
     addSchedule, deleteSchedule, confirmSchedInterest,

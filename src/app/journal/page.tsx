@@ -3,28 +3,52 @@ import { useState, useMemo } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { useFinance } from "@/lib/useFinance";
 import { THB, fmt, COA } from "@/lib/balance";
-import { SCENARIOS, PM_BANK, PM_ASSET_ACCT, PM_LIAB_ACCT, type Scenario } from "@/lib/scenarios";
+import { SCENARIOS, PM_ASSET_ACCT, PM_LIAB_ACCT, type Scenario } from "@/lib/scenarios";
 
-const ALL_PM = [...PM_BANK, ...PM_ASSET_ACCT, ...PM_LIAB_ACCT];
+const BANK_TYPES: Record<string, string> = {
+  savings: "ออมทรัพย์",
+  fixed:   "ฝากประจำ",
+  current: "กระแสรายวัน",
+  other:   "อื่นๆ",
+};
 
-function getPMPool(s: Scenario, ccCards: { id: string; name: string; account_code: string }[]) {
+function getPMPool(
+  s: Scenario,
+  ccCards: { id: string; name: string; account_code: string }[],
+  userBanks: { id: string; name: string; type: string; account_code: string }[],
+) {
   const ccPM = ccCards.map(c => ({ id: "cc:" + c.id, name: "💳 " + c.name, acct: c.account_code }));
-  if (s.pmRole === "receive") return PM_BANK;
+  const bankPM = userBanks.map(b => ({ id: "bank:" + b.id, name: `🏦 ${b.name} (${BANK_TYPES[b.type] ?? b.type})`, acct: b.account_code }));
+  if (s.pmRole === "receive") return bankPM;
+  if (s.pmRole === "pay")     return [...bankPM, ...ccPM];
   if (s.pmRole === "asset_acct") return PM_ASSET_ACCT;
   if (s.pmRole === "liab_acct") return PM_LIAB_ACCT;
-  return [...PM_BANK, ...ccPM];
+  return [];
 }
 
-function resolvePM(pmId: string, ccCards: { id: string; name: string; account_code: string }[]) {
+function resolvePM(
+  pmId: string,
+  ccCards: { id: string; name: string; account_code: string }[],
+  userBanks: { id: string; name: string; type: string; account_code: string }[],
+) {
   if (pmId.startsWith("cc:")) {
     const c = ccCards.find(x => "cc:" + x.id === pmId);
     return c ? { id: pmId, name: "💳 " + c.name, acct: c.account_code } : undefined;
   }
-  return ALL_PM.find(p => p.id === pmId);
+  if (pmId.startsWith("bank:")) {
+    const b = userBanks.find(x => "bank:" + x.id === pmId);
+    return b ? { id: pmId, name: `🏦 ${b.name} (${BANK_TYPES[b.type] ?? b.type})`, acct: b.account_code } : undefined;
+  }
+  return [...PM_ASSET_ACCT, ...PM_LIAB_ACCT].find(p => p.id === pmId);
 }
 
-function resolveEntry(scen: Scenario, pmId: string, ccCards: { id: string; name: string; account_code: string }[]) {
-  const pm = resolvePM(pmId, ccCards);
+function resolveEntry(
+  scen: Scenario,
+  pmId: string,
+  ccCards: { id: string; name: string; account_code: string }[],
+  userBanks: { id: string; name: string; type: string; account_code: string }[],
+) {
+  const pm = resolvePM(pmId, ccCards, userBanks);
   if (scen.pmRole !== "none" && !pm) return null;
   const dr = scen.dr === "PM" ? pm?.acct : scen.dr;
   const cr = scen.cr === "PM" ? pm?.acct : scen.cr;
@@ -37,16 +61,22 @@ function resolveEntry(scen: Scenario, pmId: string, ccCards: { id: string; name:
 }
 
 export default function JournalPage() {
-  const { txns, ccCards, addTransaction, deleteTransaction, summary, loading } = useFinance();
+  const { txns, ccCards, userBanks, userCreatedAt, addUserBank, addTransaction, deleteTransaction, summary, loading } = useFinance();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ date: "", desc: "", scenId: "", pmId: "", amount: "" });
+  // ob_bank specific
+  const [bankName, setBankName] = useState("");
+  const [bankType, setBankType] = useState("savings");
+  // ob_asset / ob_liab sub-label
+  const [subLabel, setSubLabel] = useState("");
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
 
   const scen = SCENARIOS.find(s => s.id === form.scenId);
-  const pmPool = scen ? getPMPool(scen, ccCards) : [];
-  const entry = scen ? resolveEntry(scen, form.pmId, ccCards) : null;
-  const needsPM = scen && scen.pmRole !== "none";
+  const isObBank = form.scenId === "ob_bank";
+  const pmPool = scen && !isObBank ? getPMPool(scen, ccCards, userBanks) : [];
+  const entry = scen && !isObBank ? resolveEntry(scen, form.pmId, ccCards, userBanks) : null;
+  const needsPM = scen && scen.pmRole !== "none" && !isObBank;
 
   const groups = useMemo(() => {
     const g: Record<string, Scenario[]> = {};
@@ -56,19 +86,74 @@ export default function JournalPage() {
 
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
 
+  function handleScenChange(newId: string) {
+    const s = SCENARIOS.find(x => x.id === newId);
+    setForm(p => ({
+      ...p,
+      scenId: newId,
+      pmId: "",
+      // auto-fill registration date for Opening Balance group
+      date: s?.group === "📂 Opening Balance" && userCreatedAt ? userCreatedAt : p.date,
+    }));
+    setBankName("");
+    setBankType("savings");
+    setSubLabel("");
+  }
+
+  function resetForm() {
+    setForm({ date: "", desc: "", scenId: "", pmId: "", amount: "" });
+    setBankName(""); setBankType("savings"); setSubLabel(""); setErr("");
+  }
+
   async function submit() {
-    if (!form.date || !form.desc || !form.scenId || !form.amount) { setErr("กรุณากรอกให้ครบ"); return; }
-    if (needsPM && !form.pmId) { setErr("กรุณาเลือก" + (scen?.pmLabel || "ช่องทาง")); return; }
-    if (!entry) { setErr("ไม่สามารถ generate Dr/Cr ได้"); return; }
+    if (!form.date || !form.amount) { setErr("กรุณากรอกวันที่และจำนวนเงิน"); return; }
+    const amt = parseFloat(form.amount);
+    if (isNaN(amt) || amt <= 0) { setErr("จำนวนเงินไม่ถูกต้อง"); return; }
+
     setSaving(true);
+
+    // --- Special case: ob_bank ---
+    if (isObBank) {
+      if (!bankName.trim()) { setErr("กรุณาระบุชื่อธนาคาร/บัญชี"); setSaving(false); return; }
+      const { bank, error: bankErr } = await addUserBank(bankName.trim(), bankType);
+      if (bankErr || !bank) { setErr(bankErr?.message || "ไม่สามารถสร้างบัญชีธนาคารได้"); setSaving(false); return; }
+      const label = `${bank.name} (${BANK_TYPES[bank.type] ?? bank.type})`;
+      const { error } = await addTransaction({
+        date: form.date,
+        description: form.desc || `ยอดเงิน${bank.name} เริ่มต้น`,
+        dr_account: bank.account_code,
+        cr_account: "3100",
+        dr_name: label,
+        cr_name: "Opening Equity",
+        amount: amt,
+        is_system: false,
+      });
+      if (error) setErr(error.message);
+      else { resetForm(); setOpen(false); }
+      setSaving(false);
+      return;
+    }
+
+    // --- Normal case ---
+    if (!form.scenId) { setErr("กรุณาเลือกประเภทรายการ"); setSaving(false); return; }
+    if (needsPM && !form.pmId) { setErr("กรุณาเลือก" + (scen?.pmLabel || "ช่องทาง")); setSaving(false); return; }
+    if (!entry) { setErr("ไม่สามารถ generate Dr/Cr ได้"); setSaving(false); return; }
+
+    const descFinal = form.desc
+      ? (subLabel ? `${form.desc} — ${subLabel}` : form.desc)
+      : (subLabel || scen?.label || "");
+
+    const drNameFinal = subLabel && scen?.id === "ob_asset" ? `${entry.drName} (${subLabel})` : entry.drName;
+    const crNameFinal = subLabel && scen?.id === "ob_liab"  ? `${entry.crName} (${subLabel})` : entry.crName;
+
     const { error } = await addTransaction({
-      date: form.date, description: form.desc,
+      date: form.date, description: descFinal,
       dr_account: entry.dr, cr_account: entry.cr,
-      dr_name: entry.drName, cr_name: entry.crName,
-      amount: parseFloat(form.amount), is_system: false,
+      dr_name: drNameFinal, cr_name: crNameFinal,
+      amount: amt, is_system: false,
     });
     if (error) setErr(error.message);
-    else { setForm({ date: "", desc: "", scenId: "", pmId: "", amount: "" }); setErr(""); setOpen(false); }
+    else { resetForm(); setOpen(false); }
     setSaving(false);
   }
 
@@ -107,7 +192,7 @@ export default function JournalPage() {
             </div>
             <div>
               <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>ประเภทรายการ</label>
-              <select value={form.scenId} onChange={e => { set("scenId", e.target.value); set("pmId", ""); }}>
+              <select value={form.scenId} onChange={e => handleScenChange(e.target.value)}>
                 <option value="">— เลือกประเภท —</option>
                 {Object.entries(groups).map(([g, items]) => (
                   <optgroup key={g} label={g}>
@@ -119,18 +204,76 @@ export default function JournalPage() {
             </div>
           </div>
 
-          <div className="mb-3">
-            <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>
-              {scen?.pmLabel || "ช่องทาง"}{!needsPM && " (ไม่จำเป็น)"}
-            </label>
-            <select value={form.pmId} onChange={e => set("pmId", e.target.value)} disabled={!needsPM} style={{ opacity: needsPM ? 1 : 0.4 }}>
-              <option value="">— เลือก —</option>
-              {pmPool.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </div>
+          {/* ob_bank: bank name + type inputs */}
+          {isObBank && (
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>ชื่อธนาคาร / บัญชี</label>
+                <input type="text" value={bankName} onChange={e => setBankName(e.target.value)}
+                  placeholder="เช่น KBank, SCB, ธกส..." style={{ textAlign: "left" }} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>ประเภทบัญชี</label>
+                <select value={bankType} onChange={e => setBankType(e.target.value)}>
+                  {Object.entries(BANK_TYPES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+            </div>
+          )}
 
-          {/* Preview */}
-          {entry && parseFloat(form.amount) > 0 && (
+          {/* ob_bank preview */}
+          {isObBank && bankName.trim() && parseFloat(form.amount) > 0 && (
+            <div className="mb-3 rounded-lg overflow-hidden" style={{ border: "0.5px solid #16243a" }}>
+              <div className="flex">
+                <div className="flex-1 px-3 py-2" style={{ background: "#0a1628" }}>
+                  <div className="text-xs mb-1" style={{ color: "#455672" }}>DEBIT — บัญชีรับเงิน</div>
+                  <span className="text-xs font-bold mr-1" style={{ color: "#60a5fa" }}>11xx</span>
+                  <span className="text-xs" style={{ color: "#93c5fd" }}>{bankName} ({BANK_TYPES[bankType]})</span>
+                </div>
+                <div className="flex-1 px-3 py-2" style={{ background: "#160a0a" }}>
+                  <div className="text-xs mb-1" style={{ color: "#455672" }}>CREDIT</div>
+                  <span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>3100</span>
+                  <span className="text-xs" style={{ color: "#fca5a5" }}>Opening Equity</span>
+                </div>
+                <div className="px-3 py-2 flex items-center" style={{ background: "#0a160a" }}>
+                  <span className="text-sm font-medium" style={{ color: "#4ade80" }}>{THB(parseFloat(form.amount || "0"))}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Normal PM selector */}
+          {!isObBank && (
+            <div className="mb-3">
+              <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>
+                {scen?.pmLabel || "ช่องทาง"}{!needsPM && " (ไม่จำเป็น)"}
+              </label>
+              <select value={form.pmId} onChange={e => set("pmId", e.target.value)} disabled={!needsPM} style={{ opacity: needsPM ? 1 : 0.4 }}>
+                <option value="">— เลือก —</option>
+                {pmPool.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              {needsPM && pmPool.length === 0 && (
+                <div className="mt-1.5 text-xs px-2 py-1.5 rounded" style={{ background: "#1a0800", color: "#fb923c", borderLeft: "2px solid #fb923c" }}>
+                  ยังไม่มีบัญชีธนาคาร — กรุณาบันทึก &quot;ยอดเงินฝากธนาคารเริ่มต้น&quot; ก่อน
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Sub-label for ob_asset / ob_liab */}
+          {(scen?.id === "ob_asset" || scen?.id === "ob_liab") && (
+            <div className="mb-3">
+              <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>
+                {scen.id === "ob_asset" ? "ชื่อ/รายละเอียดสินทรัพย์ (ไม่บังคับ)" : "ชื่อ/สถาบัน/รายละเอียด (ไม่บังคับ)"}
+              </label>
+              <input type="text" value={subLabel} onChange={e => setSubLabel(e.target.value)}
+                placeholder={scen.id === "ob_asset" ? "เช่น Toyota Fortuner, บ้านสุขุมวิท, ทองคำ 5 บาท..." : "เช่น KBank Visa, สินเชื่อบ้านธนาคารออมสิน..."}
+                style={{ textAlign: "left" }} />
+            </div>
+          )}
+
+          {/* Preview for normal entries */}
+          {!isObBank && entry && parseFloat(form.amount) > 0 && (
             <div className="mb-3 rounded-lg overflow-hidden" style={{ border: "0.5px solid #16243a" }}>
               <div className="flex">
                 <div className="flex-1 px-3 py-2" style={{ background: "#0a1628" }}>
@@ -155,7 +298,7 @@ export default function JournalPage() {
             <button onClick={submit} disabled={saving} className="px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ background: "#2563eb", opacity: saving ? 0.6 : 1 }}>
               {saving ? "กำลังบันทึก..." : "บันทึก"}
             </button>
-            <button onClick={() => { setOpen(false); setErr(""); }} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: "#0f1828", color: "#455672", border: "0.5px solid #16243a" }}>
+            <button onClick={() => { setOpen(false); resetForm(); }} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: "#0f1828", color: "#455672", border: "0.5px solid #16243a" }}>
               ยกเลิก
             </button>
           </div>

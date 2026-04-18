@@ -9,20 +9,33 @@ function dateLabel() {
   return `ณ วันที่ ${d.getDate()} ${MONTHS[d.getMonth() + 1]} ${d.getFullYear() + 543}`;
 }
 
+const BANK_TYPES: Record<string, string> = {
+  savings: "ออมทรัพย์",
+  fixed:   "ฝากประจำ",
+  current: "กระแสรายวัน",
+  other:   "อื่นๆ",
+};
+
 export default function BalanceSheetPage() {
-  const { summary, loading } = useFinance();
+  const { summary, userBanks, loading } = useFinance();
   if (loading || !summary) return <AppShell><div className="text-sm" style={{ color: "#455672" }}>กำลังโหลด...</div></AppShell>;
 
   const { balances, totalAssets, totalLiab, totalEquity, netIncome, openingEquity, balanced, diff } = summary;
   const g = (c: string) => netBal(balances, c);
 
-  const CA  = ["1110","1120","1130","1140","1150"];
+  // Current assets: cash + user banks
+  const cashBal   = g("1110");
+  const bankBals  = userBanks.map(b => ({ ...b, bal: balances[b.account_code] || 0 }));
+  const bankTotal = bankBals.reduce((s, b) => s + b.bal, 0);
+  const otherCA   = ["1130","1140","1150"];
+  const otherCATotal = otherCA.reduce((s, c) => s + g(c), 0);
+  const caTotal   = cashBal + bankTotal + otherCATotal;
+
   const INV = ["1210","1220"];
   const FIX = ["1310","1320","1330","1340","1350","1360"];
   const CL  = ["2110","2120","2130","2140"];
   const NCL = ["2210","2220","2230"];
 
-  const caTotal  = CA.reduce((s,c)=>s+g(c),0);
   const invTotal = INV.reduce((s,c)=>s+g(c),0);
   const fixTotal = FIX.reduce((s,c)=>s+g(c),0);
   const clTotal  = CL.reduce((s,c)=>s+g(c),0);
@@ -46,7 +59,11 @@ export default function BalanceSheetPage() {
         <BSCard>
           <BSHeader bg="#14532d">สินทรัพย์ / Assets</BSHeader>
           <BSGroup label="สินทรัพย์หมุนเวียน" total={caTotal} />
-          {CA.map(c => g(c) ? <BSRow key={c} label={COA[c]?.name} val={g(c)} indent /> : null)}
+          {cashBal ? <BSRow label="เงินสดติดตัว" val={cashBal} indent /> : null}
+          {bankBals.filter(b => b.bal > 0).map(b => (
+            <BSRow key={b.id} label={`${b.name} (${BANK_TYPES[b.type] ?? b.type})`} val={b.bal} indent />
+          ))}
+          {otherCA.map(c => g(c) ? <BSRow key={c} label={COA[c]?.name} val={g(c)} indent /> : null)}
           <BSSubtotal label="รวมสินทรัพย์หมุนเวียน" val={caTotal} color="#22c55e" />
 
           <BSGroup label="เงินลงทุน" total={invTotal} />
