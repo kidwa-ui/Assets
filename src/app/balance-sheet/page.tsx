@@ -10,36 +10,45 @@ function dateLabel() {
 }
 
 const BANK_TYPES: Record<string, string> = {
-  savings: "ออมทรัพย์",
-  fixed:   "ฝากประจำ",
-  current: "กระแสรายวัน",
-  other:   "อื่นๆ",
+  savings: "ออมทรัพย์", fixed: "ฝากประจำ", current: "กระแสรายวัน", other: "อื่นๆ",
 };
 
 export default function BalanceSheetPage() {
-  const { summary, userBanks, loading } = useFinance();
+  const { summary, userBanks, ccCards, loading } = useFinance();
   if (loading || !summary) return <AppShell><div className="text-sm" style={{ color: "#455672" }}>กำลังโหลด...</div></AppShell>;
 
-  const { balances, totalAssets, totalLiab, totalEquity, netIncome, openingEquity, balanced, diff } = summary;
-  const g = (c: string) => netBal(balances, c);
+  const { balances, totalAssets, totalLiab, totalEquity, netIncome, balanced, diff } = summary;
 
-  // Current assets: cash + user banks
-  const cashBal   = g("1110");
-  const bankBals  = userBanks.map(b => ({ ...b, bal: balances[b.account_code] || 0 }));
-  const bankTotal = bankBals.reduce((s, b) => s + b.bal, 0);
-  const otherCA   = ["1130","1140","1150"];
+  // Build dynamic COA from user-defined accounts
+  const bankCOA = Object.fromEntries(userBanks.map(b => [b.account_code, { name: b.name, type: "asset" as const, normal: "debit" as const }]));
+  const cardCOA = Object.fromEntries(ccCards.map(c => [c.account_code, { name: c.name, type: "liability" as const, normal: "credit" as const }]));
+  const dynCOA  = { ...bankCOA, ...cardCOA };
+  const g = (c: string) => netBal(balances, c, dynCOA);
+
+  // ── ASSETS ──────────────────────────────────────────────
+  const cashBal    = g("1110");
+  const bankBals   = userBanks.map(b => ({ ...b, bal: g(b.account_code) }));
+  const bankTotal  = bankBals.reduce((s, b) => s + b.bal, 0);
+  const otherCA    = ["1130","1140","1150"];
   const otherCATotal = otherCA.reduce((s, c) => s + g(c), 0);
-  const caTotal   = cashBal + bankTotal + otherCATotal;
+  const caTotal    = cashBal + bankTotal + otherCATotal;
 
   const INV = ["1210","1220"];
   const FIX = ["1310","1320","1330","1340","1350","1360"];
-  const CL  = ["2110","2120","2130","2140"];
-  const NCL = ["2210","2220","2230"];
+  const invTotal = INV.reduce((s,c) => s + g(c), 0);
+  const fixTotal = FIX.reduce((s,c) => s + g(c), 0);
 
-  const invTotal = INV.reduce((s,c)=>s+g(c),0);
-  const fixTotal = FIX.reduce((s,c)=>s+g(c),0);
-  const clTotal  = CL.reduce((s,c)=>s+g(c),0);
-  const nclTotal = NCL.reduce((s,c)=>s+g(c),0);
+  // ── LIABILITIES ─────────────────────────────────────────
+  const creditCards = ccCards.filter(c => c.card_type === "credit");
+  const bnplCards   = ccCards.filter(c => c.card_type === "bnpl");
+  const ccTotal     = creditCards.reduce((s, c) => s + g(c.account_code), 0);
+  const bnplTotal   = bnplCards.reduce((s, c) => s + g(c.account_code), 0);
+  const otherCL     = ["2130","2140"];
+  const otherCLTotal = otherCL.reduce((s, c) => s + g(c), 0);
+  const clTotal     = ccTotal + bnplTotal + otherCLTotal;
+
+  const NCL = ["2210","2220","2230"];
+  const nclTotal = NCL.reduce((s,c) => s + g(c), 0);
 
   return (
     <AppShell netWorth={totalEquity} netIncome={netIncome} balanced={balanced}>
@@ -58,6 +67,7 @@ export default function BalanceSheetPage() {
         {/* LEFT — Assets */}
         <BSCard>
           <BSHeader bg="#14532d">สินทรัพย์ / Assets</BSHeader>
+
           <BSGroup label="สินทรัพย์หมุนเวียน" total={caTotal} />
           {cashBal ? <BSRow label="เงินสดติดตัว" val={cashBal} indent /> : null}
           {bankBals.filter(b => b.bal > 0).map(b => (
@@ -81,8 +91,28 @@ export default function BalanceSheetPage() {
         <div className="flex flex-col gap-4">
           <BSCard>
             <BSHeader bg="#7f1d1d">หนี้สิน / Liabilities</BSHeader>
+
             <BSGroup label="หนี้สินหมุนเวียน" total={clTotal} />
-            {CL.map(c => g(c) ? <BSRow key={c} label={COA[c]?.name} val={g(c)} indent color="#fca5a5" /> : null)}
+
+            {/* บัตรเครดิต */}
+            {creditCards.length > 0 && (
+              <BSSubGroup label="💳 บัตรเครดิต" total={ccTotal} />
+            )}
+            {creditCards.map(c => g(c.account_code) ? (
+              <BSRow key={c.id} label={c.name} val={g(c.account_code)} indent color="#fca5a5" />
+            ) : null)}
+
+            {/* BNPL */}
+            {bnplCards.length > 0 && (
+              <BSSubGroup label="🛒 BNPL / Pay Later" total={bnplTotal} />
+            )}
+            {bnplCards.map(c => g(c.account_code) ? (
+              <BSRow key={c.id} label={c.name} val={g(c.account_code)} indent color="#fca5a5" />
+            ) : null)}
+
+            {/* Other current liabilities */}
+            {otherCL.map(c => g(c) ? <BSRow key={c} label={COA[c]?.name} val={g(c)} indent color="#fca5a5" /> : null)}
+
             <BSSubtotal label="รวมหนี้สินหมุนเวียน" val={clTotal} color="#ef4444" />
 
             <BSGroup label="หนี้สินไม่หมุนเวียน" total={nclTotal} />
@@ -110,7 +140,6 @@ export default function BalanceSheetPage() {
         </div>
       </div>
 
-      {/* Balance check */}
       <div className="mt-4 rounded-xl p-3 text-center" style={{ border:`0.5px solid ${balanced?"#22c55e44":"#ef444444"}` }}>
         <div className="font-medium text-sm" style={{ color: balanced ? "#22c55e" : "#ef4444" }}>
           {balanced ? "✅ สินทรัพย์ = หนี้สิน + ส่วนเจ้าของ" : "❌ ยังไม่ Balance"}
@@ -132,6 +161,13 @@ function BSHeader({ bg, children }: { bg: string; children: React.ReactNode }) {
 function BSGroup({ label, total }: { label: string; total: number }) {
   return (
     <div className="flex justify-between px-4 py-1.5 text-xs font-medium" style={{ background: "#0f1828", borderTop: "0.5px solid #16243a", color: "#455672" }}>
+      <span>{label}</span><span>{THB(total)}</span>
+    </div>
+  );
+}
+function BSSubGroup({ label, total }: { label: string; total: number }) {
+  return (
+    <div className="flex justify-between px-4 py-1 text-xs" style={{ background: "#0f1f38", borderTop: "0.5px solid #16243a", color: "#7dd3fc" }}>
       <span>{label}</span><span>{THB(total)}</span>
     </div>
   );

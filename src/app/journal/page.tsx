@@ -6,23 +6,29 @@ import { THB, fmt, COA } from "@/lib/balance";
 import { SCENARIOS, PM_ASSET_ACCT, PM_LIAB_ACCT, type Scenario } from "@/lib/scenarios";
 
 const BANK_TYPES: Record<string, string> = {
-  savings: "ออมทรัพย์",
-  fixed:   "ฝากประจำ",
-  current: "กระแสรายวัน",
-  other:   "อื่นๆ",
+  savings: "ออมทรัพย์", fixed: "ฝากประจำ", current: "กระแสรายวัน", other: "อื่นๆ",
 };
+
+// Scenarios that need special dual-PM handling (card + bank)
+const DUAL_PM_SCENS = ["pay_cc", "pay_bnpl"];
+// Scenarios that create a new card entity
+const CARD_SETUP_SCENS = ["ob_cc", "ob_bnpl"];
 
 function getPMPool(
   s: Scenario,
-  ccCards: { id: string; name: string; account_code: string }[],
+  ccCards: { id: string; name: string; card_type: string; account_code: string }[],
   userBanks: { id: string; name: string; type: string; account_code: string }[],
 ) {
-  const ccPM = ccCards.map(c => ({ id: "cc:" + c.id, name: "💳 " + c.name, acct: c.account_code }));
   const bankPM = userBanks.map(b => ({ id: "bank:" + b.id, name: `🏦 ${b.name} (${BANK_TYPES[b.type] ?? b.type})`, acct: b.account_code }));
-  if (s.pmRole === "receive") return bankPM;
-  if (s.pmRole === "pay")     return [...bankPM, ...ccPM];
-  if (s.pmRole === "asset_acct") return PM_ASSET_ACCT;
-  if (s.pmRole === "liab_acct") return PM_LIAB_ACCT;
+  const ccPM   = ccCards.map(c => ({ id: "cc:" + c.id, name: `${c.card_type === "bnpl" ? "🛒" : "💳"} ${c.name}`, acct: c.account_code }));
+
+  if (s.pmRole === "receive")     return bankPM;
+  if (s.pmRole === "asset_acct")  return PM_ASSET_ACCT;
+  if (s.pmRole === "liab_acct")   return PM_LIAB_ACCT;
+  // pay_cc / pay_bnpl: CR = bank only (card selector handled separately)
+  if (DUAL_PM_SCENS.includes(s.id)) return bankPM;
+  // generic pay: banks + cards
+  if (s.pmRole === "pay") return [...bankPM, ...ccPM];
   return [];
 }
 
@@ -61,22 +67,33 @@ function resolveEntry(
 }
 
 export default function JournalPage() {
-  const { txns, ccCards, userBanks, userCreatedAt, addUserBank, addTransaction, deleteTransaction, summary, loading } = useFinance();
+  const { txns, ccCards, userBanks, userCreatedAt, addCCCard, addUserBank, addTransaction, deleteTransaction, summary, loading } = useFinance();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ date: "", desc: "", scenId: "", pmId: "", amount: "" });
-  // ob_bank specific
+  // ob_bank
   const [bankName, setBankName] = useState("");
   const [bankType, setBankType] = useState("savings");
+  // ob_cc / ob_bnpl
+  const [cardName, setCardName] = useState("");
+  // pay_cc / pay_bnpl — card selector for DR
+  const [payCardId, setPayCardId] = useState("");
   // ob_asset / ob_liab sub-label
   const [subLabel, setSubLabel] = useState("");
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
 
   const scen = SCENARIOS.find(s => s.id === form.scenId);
-  const isObBank = form.scenId === "ob_bank";
-  const pmPool = scen && !isObBank ? getPMPool(scen, ccCards, userBanks) : [];
-  const entry = scen && !isObBank ? resolveEntry(scen, form.pmId, ccCards, userBanks) : null;
-  const needsPM = scen && scen.pmRole !== "none" && !isObBank;
+  const isObBank    = form.scenId === "ob_bank";
+  const isCardSetup = CARD_SETUP_SCENS.includes(form.scenId);
+  const isDualPay   = DUAL_PM_SCENS.includes(form.scenId);
+  const cardType    = form.scenId === "ob_bnpl" || form.scenId === "pay_bnpl" ? "bnpl" : "credit";
+  const availablePayCards = ccCards.filter(c => c.card_type === cardType);
+
+  const pmPool  = scen && !isObBank && !isCardSetup ? getPMPool(scen, ccCards, userBanks) : [];
+  const entry   = scen && !isObBank && !isCardSetup && !isDualPay
+    ? resolveEntry(scen, form.pmId, ccCards, userBanks)
+    : null;
+  const needsPM = scen && scen.pmRole !== "none" && !isObBank && !isCardSetup;
 
   const groups = useMemo(() => {
     const g: Record<string, Scenario[]> = {};
@@ -89,75 +106,85 @@ export default function JournalPage() {
   function handleScenChange(newId: string) {
     const s = SCENARIOS.find(x => x.id === newId);
     setForm(p => ({
-      ...p,
-      scenId: newId,
-      pmId: "",
-      // auto-fill registration date for Opening Balance group
+      ...p, scenId: newId, pmId: "",
       date: s?.group === "📂 Opening Balance" && userCreatedAt ? userCreatedAt : p.date,
     }));
-    setBankName("");
-    setBankType("savings");
-    setSubLabel("");
+    setBankName(""); setBankType("savings");
+    setCardName(""); setPayCardId(""); setSubLabel("");
   }
 
   function resetForm() {
     setForm({ date: "", desc: "", scenId: "", pmId: "", amount: "" });
-    setBankName(""); setBankType("savings"); setSubLabel(""); setErr("");
+    setBankName(""); setBankType("savings");
+    setCardName(""); setPayCardId(""); setSubLabel(""); setErr("");
   }
 
   async function submit() {
     if (!form.date || !form.amount) { setErr("กรุณากรอกวันที่และจำนวนเงิน"); return; }
     const amt = parseFloat(form.amount);
-    if (isNaN(amt) || amt <= 0) { setErr("จำนวนเงินไม่ถูกต้อง"); return; }
-
+    if (isNaN(amt) || amt < 0) { setErr("จำนวนเงินไม่ถูกต้อง"); return; }
     setSaving(true);
 
-    // --- Special case: ob_bank ---
+    // --- ob_bank ---
     if (isObBank) {
       if (!bankName.trim()) { setErr("กรุณาระบุชื่อธนาคาร/บัญชี"); setSaving(false); return; }
       const { bank, error: bankErr } = await addUserBank(bankName.trim(), bankType);
-      if (bankErr || !bank) { setErr(bankErr?.message || "ไม่สามารถสร้างบัญชีธนาคารได้"); setSaving(false); return; }
+      if (bankErr || !bank) { setErr(bankErr?.message || "สร้างบัญชีไม่สำเร็จ"); setSaving(false); return; }
       const label = `${bank.name} (${BANK_TYPES[bank.type] ?? bank.type})`;
-      const { error } = await addTransaction({
-        date: form.date,
-        description: form.desc || `ยอดเงิน${bank.name} เริ่มต้น`,
-        dr_account: bank.account_code,
-        cr_account: "3100",
-        dr_name: label,
-        cr_name: "Opening Equity",
-        amount: amt,
-        is_system: false,
-      });
+      if (amt > 0) {
+        const { error } = await addTransaction({ date: form.date, description: form.desc || `ยอดเงิน${bank.name} เริ่มต้น`, dr_account: bank.account_code, cr_account: "3100", dr_name: label, cr_name: "Opening Equity", amount: amt, is_system: false });
+        if (error) { setErr(error.message); setSaving(false); return; }
+      }
+      resetForm(); setOpen(false); setSaving(false); return;
+    }
+
+    // --- ob_cc / ob_bnpl ---
+    if (isCardSetup) {
+      if (!cardName.trim()) { setErr("กรุณาระบุชื่อบัตร/บัญชี"); setSaving(false); return; }
+      const { card, error: cardErr } = await addCCCard({ name: cardName.trim(), card_type: cardType, bank_id: "" });
+      if (cardErr || !card) { setErr(cardErr?.message || "สร้างบัตรไม่สำเร็จ"); setSaving(false); return; }
+      if (amt > 0) {
+        const label = `${cardType === "bnpl" ? "🛒" : "💳"} ${card.name}`;
+        const { error } = await addTransaction({ date: form.date, description: form.desc || `หนี้${card.name} เริ่มต้น`, dr_account: "3100", cr_account: card.account_code, dr_name: "Opening Equity", cr_name: label, amount: amt, is_system: false });
+        if (error) { setErr(error.message); setSaving(false); return; }
+      }
+      resetForm(); setOpen(false); setSaving(false); return;
+    }
+
+    // --- pay_cc / pay_bnpl (dual PM) ---
+    if (isDualPay) {
+      const card = ccCards.find(c => c.id === payCardId);
+      const bank = resolvePM(form.pmId, ccCards, userBanks);
+      if (!card) { setErr("กรุณาเลือกบัตรที่ต้องการชำระ"); setSaving(false); return; }
+      if (!bank) { setErr("กรุณาเลือกบัญชีธนาคารที่โอนจ่าย"); setSaving(false); return; }
+      if (amt <= 0) { setErr("จำนวนเงินต้องมากกว่า 0"); setSaving(false); return; }
+      const { error } = await addTransaction({ date: form.date, description: form.desc || `ชำระ ${card.name}`, dr_account: card.account_code, cr_account: bank.acct, dr_name: `${cardType === "bnpl" ? "🛒" : "💳"} ${card.name}`, cr_name: bank.name, amount: amt, is_system: false });
       if (error) setErr(error.message);
       else { resetForm(); setOpen(false); }
-      setSaving(false);
-      return;
+      setSaving(false); return;
     }
 
     // --- Normal case ---
     if (!form.scenId) { setErr("กรุณาเลือกประเภทรายการ"); setSaving(false); return; }
     if (needsPM && !form.pmId) { setErr("กรุณาเลือก" + (scen?.pmLabel || "ช่องทาง")); setSaving(false); return; }
     if (!entry) { setErr("ไม่สามารถ generate Dr/Cr ได้"); setSaving(false); return; }
+    if (amt <= 0) { setErr("จำนวนเงินต้องมากกว่า 0"); setSaving(false); return; }
 
-    const descFinal = form.desc
-      ? (subLabel ? `${form.desc} — ${subLabel}` : form.desc)
-      : (subLabel || scen?.label || "");
-
+    const descFinal  = form.desc ? (subLabel ? `${form.desc} — ${subLabel}` : form.desc) : (subLabel || scen?.label || "");
     const drNameFinal = subLabel && scen?.id === "ob_asset" ? `${entry.drName} (${subLabel})` : entry.drName;
     const crNameFinal = subLabel && scen?.id === "ob_liab"  ? `${entry.crName} (${subLabel})` : entry.crName;
 
-    const { error } = await addTransaction({
-      date: form.date, description: descFinal,
-      dr_account: entry.dr, cr_account: entry.cr,
-      dr_name: drNameFinal, cr_name: crNameFinal,
-      amount: amt, is_system: false,
-    });
+    const { error } = await addTransaction({ date: form.date, description: descFinal, dr_account: entry.dr, cr_account: entry.cr, dr_name: drNameFinal, cr_name: crNameFinal, amount: amt, is_system: false });
     if (error) setErr(error.message);
     else { resetForm(); setOpen(false); }
     setSaving(false);
   }
 
   if (loading || !summary) return <AppShell><div className="text-sm" style={{ color: "#455672" }}>กำลังโหลด...</div></AppShell>;
+
+  // Dual-PM preview
+  const dualPayCard = isDualPay ? ccCards.find(c => c.id === payCardId) : null;
+  const dualPayBank = isDualPay ? resolvePM(form.pmId, ccCards, userBanks) : null;
 
   return (
     <AppShell netWorth={summary.totalEquity} netIncome={summary.netIncome} balanced={summary.balanced}>
@@ -169,7 +196,6 @@ export default function JournalPage() {
         </button>
       </div>
 
-      {/* Form */}
       {open && (
         <div className="rounded-xl p-4 mb-4" style={{ background: "#0b1220", border: "0.5px solid #3b82f644" }}>
           <p className="text-sm font-medium mb-3" style={{ color: "#93c5fd" }}>✍️ บันทึกรายการใหม่</p>
@@ -204,13 +230,12 @@ export default function JournalPage() {
             </div>
           </div>
 
-          {/* ob_bank: bank name + type inputs */}
+          {/* ob_bank: bank name + type */}
           {isObBank && (
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>ชื่อธนาคาร / บัญชี</label>
-                <input type="text" value={bankName} onChange={e => setBankName(e.target.value)}
-                  placeholder="เช่น KBank, SCB, ธกส..." style={{ textAlign: "left" }} />
+                <input type="text" value={bankName} onChange={e => setBankName(e.target.value)} placeholder="เช่น KBank, SCB, ธกส..." style={{ textAlign: "left" }} />
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>ประเภทบัญชี</label>
@@ -221,40 +246,54 @@ export default function JournalPage() {
             </div>
           )}
 
-          {/* ob_bank preview */}
-          {isObBank && bankName.trim() && parseFloat(form.amount) > 0 && (
-            <div className="mb-3 rounded-lg overflow-hidden" style={{ border: "0.5px solid #16243a" }}>
-              <div className="flex">
-                <div className="flex-1 px-3 py-2" style={{ background: "#0a1628" }}>
-                  <div className="text-xs mb-1" style={{ color: "#455672" }}>DEBIT — บัญชีรับเงิน</div>
-                  <span className="text-xs font-bold mr-1" style={{ color: "#60a5fa" }}>11xx</span>
-                  <span className="text-xs" style={{ color: "#93c5fd" }}>{bankName} ({BANK_TYPES[bankType]})</span>
-                </div>
-                <div className="flex-1 px-3 py-2" style={{ background: "#160a0a" }}>
-                  <div className="text-xs mb-1" style={{ color: "#455672" }}>CREDIT</div>
-                  <span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>3100</span>
-                  <span className="text-xs" style={{ color: "#fca5a5" }}>Opening Equity</span>
-                </div>
-                <div className="px-3 py-2 flex items-center" style={{ background: "#0a160a" }}>
-                  <span className="text-sm font-medium" style={{ color: "#4ade80" }}>{THB(parseFloat(form.amount || "0"))}</span>
-                </div>
+          {/* ob_cc / ob_bnpl: card name */}
+          {isCardSetup && (
+            <div className="mb-3">
+              <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>
+                {cardType === "bnpl" ? "ชื่อบริการ BNPL / Pay Later" : "ชื่อบัตรเครดิต"}
+              </label>
+              <input type="text" value={cardName} onChange={e => setCardName(e.target.value)}
+                placeholder={cardType === "bnpl" ? "เช่น Shopee S Pay Later, True Money Pay Next..." : "เช่น KBank Platinum, SCB Cashback..."}
+                style={{ textAlign: "left" }} />
+              <div className="mt-1.5 text-xs px-2 py-1.5 rounded" style={{ background: "#0a1628", color: "#60a5fa", borderLeft: "2px solid #3b82f6" }}>
+                ยอดเงิน = 0 ได้ หากบัตร/บริการนี้ยังไม่มีหนี้สินตั้งต้น
               </div>
             </div>
           )}
 
-          {/* Normal PM selector */}
-          {!isObBank && (
+          {/* pay_cc / pay_bnpl: card selector (DR) */}
+          {isDualPay && (
             <div className="mb-3">
               <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>
-                {scen?.pmLabel || "ช่องทาง"}{!needsPM && " (ไม่จำเป็น)"}
+                {cardType === "bnpl" ? "บริการ BNPL ที่ชำระ" : "บัตรเครดิตที่ชำระ"}
               </label>
-              <select value={form.pmId} onChange={e => set("pmId", e.target.value)} disabled={!needsPM} style={{ opacity: needsPM ? 1 : 0.4 }}>
+              {availablePayCards.length === 0 ? (
+                <div className="text-xs px-3 py-2 rounded" style={{ background: "#1a0800", color: "#fb923c", borderLeft: "2px solid #fb923c" }}>
+                  ยังไม่มี{cardType === "bnpl" ? "บริการ BNPL" : "บัตรเครดิต"} — บันทึกผ่าน Journal &gt; Opening Balance ก่อน
+                </div>
+              ) : (
+                <select value={payCardId} onChange={e => setPayCardId(e.target.value)}>
+                  <option value="">— เลือก{cardType === "bnpl" ? "บริการ BNPL" : "บัตรเครดิต"} —</option>
+                  {availablePayCards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              )}
+            </div>
+          )}
+
+          {/* Normal PM selector */}
+          {!isObBank && !isCardSetup && (
+            <div className="mb-3">
+              <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>
+                {isDualPay ? "บัญชีธนาคารที่โอนจ่าย" : (scen?.pmLabel || "ช่องทาง")}{!needsPM && !isDualPay && " (ไม่จำเป็น)"}
+              </label>
+              <select value={form.pmId} onChange={e => set("pmId", e.target.value)}
+                disabled={!needsPM && !isDualPay} style={{ opacity: (needsPM || isDualPay) ? 1 : 0.4 }}>
                 <option value="">— เลือก —</option>
                 {pmPool.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-              {needsPM && pmPool.length === 0 && (
+              {(needsPM || isDualPay) && pmPool.length === 0 && (
                 <div className="mt-1.5 text-xs px-2 py-1.5 rounded" style={{ background: "#1a0800", color: "#fb923c", borderLeft: "2px solid #fb923c" }}>
-                  ยังไม่มีบัญชีธนาคาร — กรุณาบันทึก &quot;ยอดเงินฝากธนาคารเริ่มต้น&quot; ก่อน
+                  ยังไม่มีบัญชีธนาคาร — บันทึก &quot;ยอดเงินฝากธนาคารเริ่มต้น&quot; ก่อน
                 </div>
               )}
             </div>
@@ -267,30 +306,45 @@ export default function JournalPage() {
                 {scen.id === "ob_asset" ? "ชื่อ/รายละเอียดสินทรัพย์ (ไม่บังคับ)" : "ชื่อ/สถาบัน/รายละเอียด (ไม่บังคับ)"}
               </label>
               <input type="text" value={subLabel} onChange={e => setSubLabel(e.target.value)}
-                placeholder={scen.id === "ob_asset" ? "เช่น Toyota Fortuner, บ้านสุขุมวิท, ทองคำ 5 บาท..." : "เช่น KBank Visa, สินเชื่อบ้านธนาคารออมสิน..."}
+                placeholder={scen.id === "ob_asset" ? "เช่น Toyota Fortuner, บ้านสุขุมวิท..." : "เช่น บ้านรังสิต — ธนาคารออมสิน, รถ Honda HR-V..."}
                 style={{ textAlign: "left" }} />
             </div>
           )}
 
-          {/* Preview for normal entries */}
-          {!isObBank && entry && parseFloat(form.amount) > 0 && (
-            <div className="mb-3 rounded-lg overflow-hidden" style={{ border: "0.5px solid #16243a" }}>
-              <div className="flex">
-                <div className="flex-1 px-3 py-2" style={{ background: "#0a1628" }}>
-                  <div className="text-xs mb-1" style={{ color: "#455672" }}>DEBIT — {scen?.pmRole === "receive" ? "บัญชีรับเงิน" : "บัญชีที่เพิ่ม"}</div>
-                  <span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>{entry.dr}</span>
-                  <span className="text-xs" style={{ color: "#93c5fd" }}>{entry.drName}</span>
-                </div>
-                <div className="flex-1 px-3 py-2" style={{ background: "#160a0a" }}>
-                  <div className="text-xs mb-1" style={{ color: "#455672" }}>CREDIT — บัญชีที่ลด/หนี้เพิ่ม</div>
-                  <span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>{entry.cr}</span>
-                  <span className="text-xs" style={{ color: "#fca5a5" }}>{entry.crName}</span>
-                </div>
-                <div className="px-3 py-2 flex items-center" style={{ background: "#0a160a" }}>
-                  <span className="text-sm font-medium" style={{ color: "#4ade80" }}>{THB(parseFloat(form.amount || "0"))}</span>
-                </div>
-              </div>
-            </div>
+          {/* Preview: ob_bank */}
+          {isObBank && bankName.trim() && parseFloat(form.amount) > 0 && (
+            <PreviewRow
+              dr={<><span className="font-bold text-xs mr-1" style={{ color: "#60a5fa" }}>11xx</span><span className="text-xs" style={{ color: "#93c5fd" }}>{bankName} ({BANK_TYPES[bankType]})</span></>}
+              cr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>3100</span><span className="text-xs" style={{ color: "#fca5a5" }}>Opening Equity</span></>}
+              amt={parseFloat(form.amount || "0")}
+            />
+          )}
+
+          {/* Preview: ob_cc / ob_bnpl */}
+          {isCardSetup && cardName.trim() && parseFloat(form.amount) > 0 && (
+            <PreviewRow
+              dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>3100</span><span className="text-xs" style={{ color: "#fca5a5" }}>Opening Equity</span></>}
+              cr={<><span className="font-bold text-xs mr-1" style={{ color: "#f87171" }}>21xx</span><span className="text-xs" style={{ color: "#fca5a5" }}>{cardType === "bnpl" ? "🛒" : "💳"} {cardName}</span></>}
+              amt={parseFloat(form.amount || "0")}
+            />
+          )}
+
+          {/* Preview: pay_cc / pay_bnpl */}
+          {isDualPay && dualPayCard && dualPayBank && parseFloat(form.amount) > 0 && (
+            <PreviewRow
+              dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>{dualPayCard.account_code}</span><span className="text-xs" style={{ color: "#93c5fd" }}>{dualPayCard.name}</span></>}
+              cr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>{dualPayBank.acct}</span><span className="text-xs" style={{ color: "#fca5a5" }}>{dualPayBank.name}</span></>}
+              amt={parseFloat(form.amount || "0")}
+            />
+          )}
+
+          {/* Preview: normal entries */}
+          {!isObBank && !isCardSetup && !isDualPay && entry && parseFloat(form.amount) > 0 && (
+            <PreviewRow
+              dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>{entry.dr}</span><span className="text-xs" style={{ color: "#93c5fd" }}>{entry.drName}</span></>}
+              cr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>{entry.cr}</span><span className="text-xs" style={{ color: "#fca5a5" }}>{entry.crName}</span></>}
+              amt={parseFloat(form.amount || "0")}
+            />
           )}
 
           {err && <p className="text-xs mb-2" style={{ color: "#ef4444" }}>{err}</p>}
@@ -310,11 +364,9 @@ export default function JournalPage() {
         <div className="overflow-x-auto">
           <table className="w-full" style={{ borderCollapse: "collapse" }}>
             <thead>
-              <tr>
-                {["วันที่", "รายการ", "Dr", "Cr", "฿", ""].map(h => (
-                  <th key={h} className="px-3 py-2.5 text-left text-xs font-medium" style={{ color: "#455672", borderBottom: "0.5px solid #16243a" }}>{h}</th>
-                ))}
-              </tr>
+              <tr>{["วันที่","รายการ","Dr","Cr","฿",""].map(h => (
+                <th key={h} className="px-3 py-2.5 text-left text-xs font-medium" style={{ color: "#455672", borderBottom: "0.5px solid #16243a" }}>{h}</th>
+              ))}</tr>
             </thead>
             <tbody>
               {txns.length === 0 ? (
@@ -348,5 +400,25 @@ export default function JournalPage() {
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function PreviewRow({ dr, cr, amt }: { dr: React.ReactNode; cr: React.ReactNode; amt: number }) {
+  return (
+    <div className="mb-3 rounded-lg overflow-hidden" style={{ border: "0.5px solid #16243a" }}>
+      <div className="flex">
+        <div className="flex-1 px-3 py-2" style={{ background: "#0a1628" }}>
+          <div className="text-xs mb-1" style={{ color: "#455672" }}>DEBIT</div>
+          {dr}
+        </div>
+        <div className="flex-1 px-3 py-2" style={{ background: "#160a0a" }}>
+          <div className="text-xs mb-1" style={{ color: "#455672" }}>CREDIT</div>
+          {cr}
+        </div>
+        <div className="px-3 py-2 flex items-center" style={{ background: "#0a160a" }}>
+          <span className="text-sm font-medium" style={{ color: "#4ade80" }}>{THB(amt)}</span>
+        </div>
+      </div>
+    </div>
   );
 }

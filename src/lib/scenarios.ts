@@ -22,11 +22,11 @@ export const SCENARIOS: Scenario[] = [
   { id: "other_inc", group: "💰 รายรับ",        label: "รายได้อื่นๆ",                  dr: "PM",  cr: "4490", pmRole: "receive", pmLabel: "บัญชีที่รับเงินเข้า" },
   // ค่าใช้จ่าย
   { id: "expense",   group: "💸 ค่าใช้จ่าย",   label: "ค่าใช้จ่ายทั่วไป",             dr: "5000",cr: "PM",   pmRole: "pay",     pmLabel: "ช่องทางที่จ่ายเงิน" },
-  { id: "interest",  group: "💸 ค่าใช้จ่าย",   label: "ดอกเบี้ยจ่าย (บัตร/สินเชื่อ)", dr: "5510",cr: "PM",   pmRole: "pay",     pmLabel: "หนี้ที่เพิ่มดอกเบี้ย", hint: "บัตรเครดิต = 2110, รถ = 2220, บ้าน = 2210" },
+  { id: "interest",  group: "💸 ค่าใช้จ่าย",   label: "ดอกเบี้ยจ่าย (บัตร/สินเชื่อ)", dr: "5510",cr: "PM",   pmRole: "pay",     pmLabel: "หนี้ที่เพิ่มดอกเบี้ย", hint: "เลือกบัตรเครดิต / BNPL / สินเชื่อที่มีดอกเบี้ยเพิ่ม" },
   { id: "fee",       group: "💸 ค่าใช้จ่าย",   label: "ค่าธรรมเนียมธนาคาร",           dr: "5520",cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีที่ถูกหัก" },
-  // ชำระหนี้
+  // ชำระหนี้ — pay_cc / pay_bnpl ถูก handle เป็น special case ใน journal form
   { id: "pay_cc",    group: "💳 ชำระหนี้",      label: "จ่ายบิลบัตรเครดิต",            dr: "2110",cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีธนาคารที่โอนจ่าย", hint: "ไม่ใช่ Expense — แค่แลกหนี้บัตรเป็นเงินสด" },
-  { id: "pay_bnpl",  group: "💳 ชำระหนี้",      label: "จ่ายคืน BNPL",                 dr: "2120",cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีธนาคารที่โอนจ่าย" },
+  { id: "pay_bnpl",  group: "💳 ชำระหนี้",      label: "จ่ายคืน BNPL / Pay Later",     dr: "2120",cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีธนาคารที่โอนจ่าย" },
   { id: "pay_car",   group: "💳 ชำระหนี้",      label: "ผ่อนรถ (เงินต้น)",             dr: "2220",cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีธนาคารที่ตัดผ่อน", hint: "เฉพาะเงินต้น — ดอกเบี้ยบันทึกแยก" },
   { id: "pay_home",  group: "💳 ชำระหนี้",      label: "ผ่อนบ้าน (เงินต้น)",           dr: "2210",cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีธนาคารที่ตัดผ่อน", hint: "เฉพาะเงินต้น — ดอกเบี้ยบันทึกแยก" },
   { id: "pay_loan",  group: "💳 ชำระหนี้",      label: "ชำระเงินกู้ส่วนบุคคล",         dr: "2230",cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีธนาคารที่โอนจ่าย" },
@@ -39,19 +39,12 @@ export const SCENARIOS: Scenario[] = [
   { id: "buy_fund",  group: "🏠 ซื้อสินทรัพย์", label: "ซื้อหุ้น/กองทุน (LTF/RMF/SSF)",dr: "1210", cr: "PM",  pmRole: "pay",     pmLabel: "ช่องทางที่จ่าย", isAsset: true },
   { id: "buy_crypto",group: "🏠 ซื้อสินทรัพย์", label: "ซื้อคริปโต",                   dr: "1220",cr: "PM",   pmRole: "pay",     pmLabel: "ช่องทางที่จ่าย", isAsset: true },
   // Opening Balance
-  { id: "ob_bank",   group: "📂 Opening Balance", label: "ยอดเงินฝากธนาคารเริ่มต้น",  dr: "1120",cr: "3100", pmRole: "none" },
-  { id: "ob_cash",   group: "📂 Opening Balance", label: "ยอดเงินสดเริ่มต้น",          dr: "1110",cr: "3100", pmRole: "none" },
-  { id: "ob_asset",  group: "📂 Opening Balance", label: "สินทรัพย์ถาวรเริ่มต้น (NBV)", dr: "PM",  cr: "3100", pmRole: "asset_acct", pmLabel: "เลือก account สินทรัพย์", hint: "เช่น ยานพาหนะ / อุปกรณ์ IT / ทองคำ" },
-  { id: "ob_liab",   group: "📂 Opening Balance", label: "หนี้สินเริ่มต้น",             dr: "3100",cr: "PM",   pmRole: "liab_acct", pmLabel: "เลือก account หนี้สิน" },
-];
-
-export const PM_BANK = [
-  { id: "kbank",   name: "KBank Savings",  acct: "1120" },
-  { id: "scb",     name: "SCB Savings",    acct: "1120" },
-  { id: "bbl",     name: "BBL Savings",    acct: "1120" },
-  { id: "krungthai", name: "Krungthai",    acct: "1120" },
-  { id: "ttb",     name: "TTB",            acct: "1120" },
-  { id: "cash",    name: "เงินสด",         acct: "1110" },
+  { id: "ob_bank",   group: "📂 Opening Balance", label: "ยอดเงินฝากธนาคารเริ่มต้น",       dr: "1120",cr: "3100", pmRole: "none" },
+  { id: "ob_cash",   group: "📂 Opening Balance", label: "ยอดเงินสดเริ่มต้น",              dr: "1110",cr: "3100", pmRole: "none" },
+  { id: "ob_asset",  group: "📂 Opening Balance", label: "สินทรัพย์ถาวรเริ่มต้น (NBV)",    dr: "PM",  cr: "3100", pmRole: "asset_acct", pmLabel: "เลือก account สินทรัพย์", hint: "เช่น ยานพาหนะ / อุปกรณ์ IT / ทองคำ" },
+  { id: "ob_cc",     group: "📂 Opening Balance", label: "บัตรเครดิตเริ่มต้น",             dr: "3100",cr: "PM",   pmRole: "none" },
+  { id: "ob_bnpl",   group: "📂 Opening Balance", label: "BNPL / Pay Later เริ่มต้น",      dr: "3100",cr: "PM",   pmRole: "none" },
+  { id: "ob_liab",   group: "📂 Opening Balance", label: "หนี้สินเริ่มต้น (สินเชื่อ)",     dr: "3100",cr: "PM",   pmRole: "liab_acct", pmLabel: "เลือก account หนี้สิน" },
 ];
 
 export const PM_ASSET_ACCT = [
@@ -62,8 +55,8 @@ export const PM_ASSET_ACCT = [
   { id: "a1360", name: "ทองคำ/ของสะสม",   acct: "1360" },
 ];
 
+// บัตรเครดิตและ BNPL ถูกจัดการผ่าน cc_cards table แล้ว ไม่ได้ใช้ list นี้อีกต่อไป
 export const PM_LIAB_ACCT = [
-  { id: "l2110", name: "บัตรเครดิต",        acct: "2110" },
   { id: "l2210", name: "สินเชื่อบ้าน",      acct: "2210" },
   { id: "l2220", name: "สินเชื่อรถ",        acct: "2220" },
   { id: "l2230", name: "เงินกู้ส่วนบุคคล",  acct: "2230" },
