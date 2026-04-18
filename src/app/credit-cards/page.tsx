@@ -64,6 +64,7 @@ export default function CreditCardsPage() {
 
   if (loading || !summary) return <AppShell><div className="text-sm" style={{ color: "#455672" }}>กำลังโหลด...</div></AppShell>;
 
+  const { balances } = summary;
   const dynamicCOA = Object.fromEntries(
     ccCards.map(c => [c.account_code, { name: c.name, type: "liability" as const, normal: "credit" as const }])
   );
@@ -77,9 +78,9 @@ export default function CreditCardsPage() {
       <>
         <div className="text-xs font-medium mb-2 mt-4" style={{ color: "#455672" }}>{emoji} {typeLabel}</div>
         {cards.map(c => {
-          const bal = netBal(summary.balances, c.account_code, dynamicCOA);
+          const bal = netBal(balances, c.account_code, dynamicCOA);
           const f = getStmt(c.id, c.bank_id);
-          const curBal = -(summary.balances[c.account_code] || 0);
+          const curBal = -(balances[c.account_code] || 0);
           const stmtNum = parseFloat(f.stmtBal) || 0;
           const diff = stmtNum - curBal;
 

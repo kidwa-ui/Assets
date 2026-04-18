@@ -3,12 +3,11 @@ import { useState } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { useFinance } from "@/lib/useFinance";
 import { COA, netBal, THB, fmt } from "@/lib/balance";
-import { PM_BANK } from "@/lib/scenarios";
 
 export default function RecurringPage() {
-  const { schedules, ccCards, summary, loading, addSchedule, deleteSchedule, confirmSchedInterest } = useFinance();
+  const { schedules, ccCards, userBanks, summary, loading, addSchedule, deleteSchedule, confirmSchedInterest } = useFinance();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", liabId: "", bankId: "kbank", rate: "", total: "", defInt: "", day: "", next: "" });
+  const [form, setForm] = useState({ name: "", liabId: "", bankId: "", rate: "", total: "", defInt: "", day: "", next: "" });
   const [confirmInts, setConfirmInts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
@@ -93,7 +92,8 @@ export default function RecurringPage() {
             <div>
               <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>บัญชีธนาคารที่ตัดจ่าย</label>
               <select value={form.bankId} onChange={e => set("bankId", e.target.value)}>
-                {PM_BANK.filter(p => p.id !== "cash").map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                <option value="">— เลือกธนาคาร —</option>
+                {userBanks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
           </div>
