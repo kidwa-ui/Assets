@@ -223,8 +223,14 @@ export default function JournalPage() {
   const transferFrom = isTransfer ? resolvePM(form.pmId, ccCards, userBanks) : null;
   const transferPool = isTransfer ? getPMPool(SCENARIOS.find(s => s.id === "transfer_bank")!, ccCards, userBanks) : [];
   // Balance of selected source account for display
-  const xferBankCOA  = Object.fromEntries(userBanks.map(b => [b.account_code, { name: b.name, type: "asset" as const, normal: "debit" as const }]));
-  const transferFromBal = transferFrom ? netBal(summary.balances, transferFrom.acct, xferBankCOA) : null;
+  const pmBankCOA       = Object.fromEntries(userBanks.map(b => [b.account_code, { name: b.name, type: "asset" as const, normal: "debit" as const }]));
+  const transferFromBal = transferFrom ? netBal(summary.balances, transferFrom.acct, pmBankCOA) : null;
+  // Show balance for any bank/cash PM selection in normal PM selector
+  const selectedNormalPM = (!isObBank && !isCardSetup && !isLiabSetup && !isTransfer && form.pmId)
+    ? resolvePM(form.pmId, ccCards, userBanks) : null;
+  const selectedNormalPMBal = selectedNormalPM && (selectedNormalPM.acct === "1110" || selectedNormalPM.id.startsWith("bank:"))
+    ? netBal(summary.balances, selectedNormalPM.acct, pmBankCOA)
+    : null;
 
   return (
     <AppShell netWorth={summary.totalEquity} netIncome={summary.netIncome} balanced={summary.balanced}>
@@ -379,6 +385,11 @@ export default function JournalPage() {
               {(needsPM || isDualPay) && pmPool.length === 0 && (
                 <div className="mt-1.5 text-xs px-2 py-1.5 rounded" style={{ background: "#1a0800", color: "#fb923c", borderLeft: "2px solid #fb923c" }}>
                   ยังไม่มีบัญชีธนาคาร — บันทึก &quot;ยอดเงินฝากธนาคารเริ่มต้น&quot; ก่อน
+                </div>
+              )}
+              {selectedNormalPMBal !== null && (
+                <div className="mt-1 text-xs px-2 py-1 rounded" style={{ background: "#0a1628", color: "#60a5fa" }}>
+                  คงเหลือ: <span className="font-medium">{THB(selectedNormalPMBal)}</span>
                 </div>
               )}
             </div>
