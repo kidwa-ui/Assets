@@ -24,6 +24,8 @@ export const SCENARIOS: Scenario[] = [
   { id: "expense",   group: "💸 ค่าใช้จ่าย",   label: "ค่าใช้จ่ายทั่วไป",             dr: "5000",cr: "PM",   pmRole: "pay",     pmLabel: "ช่องทางที่จ่ายเงิน" },
   { id: "interest",  group: "💸 ค่าใช้จ่าย",   label: "ดอกเบี้ยจ่าย (บัตร/สินเชื่อ)", dr: "5510",cr: "PM",   pmRole: "pay",     pmLabel: "หนี้ที่เพิ่มดอกเบี้ย", hint: "เลือกบัตรเครดิต / BNPL / สินเชื่อที่มีดอกเบี้ยเพิ่ม" },
   { id: "fee",       group: "💸 ค่าใช้จ่าย",   label: "ค่าธรรมเนียมธนาคาร",           dr: "5520",cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีที่ถูกหัก" },
+  // โอนเงิน
+  { id: "transfer_bank", group: "🔄 โอนเงิน",  label: "โอนเงินระหว่างบัญชี",          dr: "PM",  cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีต้นทาง (หักออก)", hint: "DR = บัญชีปลายทาง (รับเงิน), CR = บัญชีต้นทาง (หักออก)" },
   // ชำระหนี้ — pay_cc / pay_bnpl ถูก handle เป็น special case ใน journal form
   { id: "pay_cc",    group: "💳 ชำระหนี้",      label: "จ่ายบิลบัตรเครดิต",            dr: "2110",cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีธนาคารที่โอนจ่าย", hint: "ไม่ใช่ Expense — แค่แลกหนี้บัตรเป็นเงินสด" },
   { id: "pay_bnpl",  group: "💳 ชำระหนี้",      label: "จ่ายคืน BNPL / Pay Later",     dr: "2120",cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีธนาคารที่โอนจ่าย" },
@@ -39,12 +41,15 @@ export const SCENARIOS: Scenario[] = [
   { id: "buy_fund",  group: "🏠 ซื้อสินทรัพย์", label: "ซื้อหุ้น/กองทุน (LTF/RMF/SSF)",dr: "1210", cr: "PM",  pmRole: "pay",     pmLabel: "ช่องทางที่จ่าย", isAsset: true },
   { id: "buy_crypto",group: "🏠 ซื้อสินทรัพย์", label: "ซื้อคริปโต",                   dr: "1220",cr: "PM",   pmRole: "pay",     pmLabel: "ช่องทางที่จ่าย", isAsset: true },
   // Opening Balance
-  { id: "ob_bank",   group: "📂 Opening Balance", label: "ยอดเงินฝากธนาคารเริ่มต้น",       dr: "1120",cr: "3100", pmRole: "none" },
-  { id: "ob_cash",   group: "📂 Opening Balance", label: "ยอดเงินสดเริ่มต้น",              dr: "1110",cr: "3100", pmRole: "none" },
-  { id: "ob_asset",  group: "📂 Opening Balance", label: "สินทรัพย์ถาวรเริ่มต้น (NBV)",    dr: "PM",  cr: "3100", pmRole: "asset_acct", pmLabel: "เลือก account สินทรัพย์", hint: "เช่น ยานพาหนะ / อุปกรณ์ IT / ทองคำ" },
-  { id: "ob_cc",     group: "📂 Opening Balance", label: "บัตรเครดิตเริ่มต้น",             dr: "3100",cr: "PM",   pmRole: "none" },
-  { id: "ob_bnpl",   group: "📂 Opening Balance", label: "BNPL / Pay Later เริ่มต้น",      dr: "3100",cr: "PM",   pmRole: "none" },
-  { id: "ob_liab",   group: "📂 Opening Balance", label: "หนี้สินเริ่มต้น (สินเชื่อ)",     dr: "3100",cr: "PM",   pmRole: "liab_acct", pmLabel: "เลือก account หนี้สิน" },
+  { id: "ob_bank",   group: "📂 Opening Balance", label: "ยอดเงินฝากธนาคารเริ่มต้น",           dr: "1120",cr: "3100", pmRole: "none" },
+  { id: "ob_cash",   group: "📂 Opening Balance", label: "ยอดเงินสดเริ่มต้น",                  dr: "1110",cr: "3100", pmRole: "none" },
+  { id: "ob_asset",  group: "📂 Opening Balance", label: "สินทรัพย์ถาวรเริ่มต้น (NBV)",        dr: "PM",  cr: "3100", pmRole: "asset_acct", pmLabel: "เลือก account สินทรัพย์", hint: "เช่น ยานพาหนะ / อุปกรณ์ IT / ทองคำ" },
+  { id: "ob_cc",     group: "📂 Opening Balance", label: "บัตรเครดิตเริ่มต้น",                 dr: "3100",cr: "PM",   pmRole: "none" },
+  { id: "ob_bnpl",   group: "📂 Opening Balance", label: "BNPL / Pay Later เริ่มต้น",          dr: "3100",cr: "PM",   pmRole: "none" },
+  { id: "ob_liab",   group: "📂 Opening Balance", label: "หนี้สินเริ่มต้น (รวม/อื่นๆ)",        dr: "3100",cr: "PM",   pmRole: "liab_acct", pmLabel: "เลือก account หนี้สิน" },
+  { id: "ob_loan_personal", group: "📂 Opening Balance", label: "เงินกู้ส่วนบุคคลเริ่มต้น (ตั้งชื่อรายการ)", dr: "3100", cr: "PM", pmRole: "none", hint: "สร้าง account ใหม่สำหรับสินเชื่อแต่ละรายการ" },
+  { id: "ob_loan_home",     group: "📂 Opening Balance", label: "สินเชื่อบ้านเริ่มต้น (ตั้งชื่อรายการ)",    dr: "3100", cr: "PM", pmRole: "none", hint: "สร้าง account ใหม่สำหรับสินเชื่อแต่ละรายการ" },
+  { id: "ob_loan_car",      group: "📂 Opening Balance", label: "สินเชื่อรถเริ่มต้น (ตั้งชื่อรายการ)",     dr: "3100", cr: "PM", pmRole: "none", hint: "สร้าง account ใหม่สำหรับสินเชื่อแต่ละรายการ" },
 ];
 
 export const PM_ASSET_ACCT = [

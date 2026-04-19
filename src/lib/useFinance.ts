@@ -56,6 +56,20 @@ export interface UserBank {
   account_code: string;
 }
 
+export interface UserLiab {
+  id: string;
+  name: string;
+  type: string; // "personal" | "home" | "car"
+  account_code: string;
+}
+
+// Account code ranges for individual loans
+const LIAB_RANGES: Record<string, [number, number]> = {
+  home:     [2211, 2219],
+  car:      [2221, 2229],
+  personal: [2231, 2259],
+};
+
 export function useFinance() {
   const supabase = createClient();
   const [userId, setUserId] = useState<string | null>(null);
@@ -66,6 +80,7 @@ export function useFinance() {
   const [ccStatements, setCCStatements] = useState<CCStatement[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
+  const [userLiabs, setUserLiabs] = useState<UserLiab[]>([]);
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<Summary | null>(null);
 
@@ -86,18 +101,22 @@ export function useFinance() {
     const cardDyn = Object.fromEntries(
       ccCards.map(c => [c.account_code, { name: c.name, type: "liability" as const, normal: "credit" as const, subtype: "current" as const }])
     );
-    setSummary(calcSummary(txns, { ...bankDyn, ...cardDyn }));
-  }, [txns, userBanks, ccCards]);
+    const liabDyn = Object.fromEntries(
+      userLiabs.map(l => [l.account_code, { name: l.name, type: "liability" as const, normal: "credit" as const, subtype: "noncurrent" as const }])
+    );
+    setSummary(calcSummary(txns, { ...bankDyn, ...cardDyn, ...liabDyn }));
+  }, [txns, userBanks, ccCards, userLiabs]);
 
   const loadAll = useCallback(async (uid: string) => {
     setLoading(true);
-    const [t, ub, c, s, sc, q] = await Promise.all([
+    const [t, ub, c, s, sc, q, ul] = await Promise.all([
       supabase.from("transactions").select("*").eq("user_id", uid).order("date", { ascending: true }),
       supabase.from("user_banks").select("*").eq("user_id", uid).order("created_at", { ascending: true }),
       supabase.from("cc_cards").select("*").eq("user_id", uid),
       supabase.from("cc_statements").select("*").eq("user_id", uid).order("statement_date", { ascending: false }),
       supabase.from("schedules").select("*").eq("user_id", uid).eq("is_active", true),
       supabase.from("queue_items").select("*, schedule:schedules(*)").eq("user_id", uid).order("due_date"),
+      supabase.from("user_liabs").select("*").eq("user_id", uid).order("created_at", { ascending: true }),
     ]);
     if (t.data) setTxns(t.data.map(r => ({ ...r, dr_account: r.dr_account, cr_account: r.cr_account })));
     if (ub.data) setUserBanks(ub.data);
@@ -105,6 +124,7 @@ export function useFinance() {
     if (s.data) setCCStatements(s.data);
     if (sc.data) setSchedules(sc.data);
     if (q.data) setQueueItems(q.data);
+    if (ul.data) setUserLiabs(ul.data);
     setLoading(false);
   }, []);
 
@@ -137,7 +157,6 @@ export function useFinance() {
 
   const addCCCard = async (card: { name: string; card_type: string; bank_id: string }): Promise<{ card?: CCCard; error?: { message: string } }> => {
     if (!userId) return {};
-    // Auto-assign account code: 2111-2149 for credit, 2151-2189 for bnpl
     const rangeStart = card.card_type === "bnpl" ? 2151 : 2111;
     const rangeEnd   = card.card_type === "bnpl" ? 2189 : 2149;
     const existing = ccCards
@@ -157,6 +176,28 @@ export function useFinance() {
   const deleteCCCard = async (id: string) => {
     await supabase.from("cc_cards").delete().eq("id", id);
     setCCCards(p => p.filter(c => c.id !== id));
+  };
+
+  const addUserLiab = async (name: string, type: string): Promise<{ liab?: UserLiab; error?: { message: string } }> => {
+    if (!userId) return {};
+    const [rangeStart, rangeEnd] = LIAB_RANGES[type] ?? [2231, 2259];
+    const existing = userLiabs
+      .filter(l => l.type === type)
+      .map(l => parseInt(l.account_code))
+      .filter(n => !isNaN(n));
+    const next = existing.length > 0 ? Math.max(...existing) + 1 : rangeStart;
+    const account_code = String(Math.min(next, rangeEnd));
+    const { data, error } = await supabase
+      .from("user_liabs")
+      .insert({ user_id: userId, name, type, account_code })
+      .select().single();
+    if (!error && data) { setUserLiabs(p => [...p, data]); return { liab: data }; }
+    return { error: error ? { message: error.message } : { message: "Unknown error" } };
+  };
+
+  const deleteUserLiab = async (id: string) => {
+    await supabase.from("user_liabs").delete().eq("id", id);
+    setUserLiabs(p => p.filter(l => l.id !== id));
   };
 
   const syncCCStatement = async (params: {
@@ -255,6 +296,7 @@ export function useFinance() {
     loading, userId, userCreatedAt, summary, txns,
     userBanks, addUserBank, deleteUserBank,
     ccCards, ccStatements, schedules, queueItems,
+    userLiabs, addUserLiab, deleteUserLiab,
     addTransaction, deleteTransaction,
     addCCCard, deleteCCCard, syncCCStatement,
     addSchedule, deleteSchedule, confirmSchedInterest,

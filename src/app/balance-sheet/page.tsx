@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { useFinance } from "@/lib/useFinance";
 import { COA, netBal, THB, fmt } from "@/lib/balance";
@@ -14,15 +15,18 @@ const BANK_TYPES: Record<string, string> = {
 };
 
 export default function BalanceSheetPage() {
-  const { summary, userBanks, ccCards, loading } = useFinance();
+  const { summary, userBanks, ccCards, userLiabs, loading } = useFinance();
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const toggle = (key: string) => setCollapsed(p => ({ ...p, [key]: !p[key] }));
+
   if (loading || !summary) return <AppShell><div className="text-sm" style={{ color: "#455672" }}>กำลังโหลด...</div></AppShell>;
 
   const { balances, totalAssets, totalLiab, totalEquity, netIncome, balanced, diff } = summary;
 
-  // Build dynamic COA from user-defined accounts
-  const bankCOA = Object.fromEntries(userBanks.map(b => [b.account_code, { name: b.name, type: "asset" as const, normal: "debit" as const }]));
-  const cardCOA = Object.fromEntries(ccCards.map(c => [c.account_code, { name: c.name, type: "liability" as const, normal: "credit" as const }]));
-  const dynCOA  = { ...bankCOA, ...cardCOA };
+  const bankCOA  = Object.fromEntries(userBanks.map(b => [b.account_code, { name: b.name, type: "asset" as const, normal: "debit" as const }]));
+  const cardCOA  = Object.fromEntries(ccCards.map(c => [c.account_code, { name: c.name, type: "liability" as const, normal: "credit" as const }]));
+  const liabCOA  = Object.fromEntries(userLiabs.map(l => [l.account_code, { name: l.name, type: "liability" as const, normal: "credit" as const }]));
+  const dynCOA   = { ...bankCOA, ...cardCOA, ...liabCOA };
   const g = (c: string) => netBal(balances, c, dynCOA);
 
   // ── ASSETS ──────────────────────────────────────────────
@@ -39,16 +43,23 @@ export default function BalanceSheetPage() {
   const fixTotal = FIX.reduce((s,c) => s + g(c), 0);
 
   // ── LIABILITIES ─────────────────────────────────────────
-  const creditCards = ccCards.filter(c => c.card_type === "credit");
-  const bnplCards   = ccCards.filter(c => c.card_type === "bnpl");
-  const ccTotal     = creditCards.reduce((s, c) => s + g(c.account_code), 0);
-  const bnplTotal   = bnplCards.reduce((s, c) => s + g(c.account_code), 0);
-  const otherCL     = ["2130","2140"];
-  const otherCLTotal = otherCL.reduce((s, c) => s + g(c), 0);
-  const clTotal     = ccTotal + bnplTotal + otherCLTotal;
+  const creditCards    = ccCards.filter(c => c.card_type === "credit");
+  const bnplCards      = ccCards.filter(c => c.card_type === "bnpl");
+  const ccTotal        = creditCards.reduce((s, c) => s + g(c.account_code), 0);
+  const bnplTotal      = bnplCards.reduce((s, c) => s + g(c.account_code), 0);
+  const otherCL        = ["2130","2140"];
+  const otherCLTotal   = otherCL.reduce((s, c) => s + g(c), 0);
+  const clTotal        = ccTotal + bnplTotal + otherCLTotal;
 
-  const NCL = ["2210","2220","2230"];
-  const nclTotal = NCL.reduce((s,c) => s + g(c), 0);
+  // Non-current: individual loans + legacy parent account balance
+  const homeLoans     = userLiabs.filter(l => l.type === "home");
+  const carLoans      = userLiabs.filter(l => l.type === "car");
+  const personalLoans = userLiabs.filter(l => l.type === "personal");
+
+  const homeTotal     = homeLoans.reduce((s, l) => s + g(l.account_code), 0) + (homeLoans.length === 0 ? g("2210") : 0);
+  const carTotal      = carLoans.reduce((s, l) => s + g(l.account_code), 0) + (carLoans.length === 0 ? g("2220") : 0);
+  const personalTotal = personalLoans.reduce((s, l) => s + g(l.account_code), 0) + (personalLoans.length === 0 ? g("2230") : 0);
+  const nclTotal      = homeTotal + carTotal + personalTotal;
 
   return (
     <AppShell netWorth={totalEquity} netIncome={netIncome} balanced={balanced}>
@@ -94,31 +105,100 @@ export default function BalanceSheetPage() {
 
             <BSGroup label="หนี้สินหมุนเวียน" total={clTotal} />
 
-            {/* บัตรเครดิต */}
+            {/* บัตรเครดิต — collapsible */}
             {creditCards.length > 0 && (
-              <BSSubGroup label="💳 บัตรเครดิต" total={ccTotal} />
+              <BSCollapsibleGroup
+                label="💳 บัตรเครดิต"
+                total={ccTotal}
+                groupKey="cc"
+                collapsed={!!collapsed.cc}
+                onToggle={toggle}
+              >
+                {creditCards.map(c => g(c.account_code) ? (
+                  <BSRow key={c.id} label={c.name} val={g(c.account_code)} indent color="#fca5a5" />
+                ) : null)}
+              </BSCollapsibleGroup>
             )}
-            {creditCards.map(c => g(c.account_code) ? (
-              <BSRow key={c.id} label={c.name} val={g(c.account_code)} indent color="#fca5a5" />
-            ) : null)}
 
-            {/* BNPL */}
+            {/* BNPL — collapsible */}
             {bnplCards.length > 0 && (
-              <BSSubGroup label="🛒 BNPL / Pay Later" total={bnplTotal} />
+              <BSCollapsibleGroup
+                label="🛒 BNPL / Pay Later"
+                total={bnplTotal}
+                groupKey="bnpl"
+                collapsed={!!collapsed.bnpl}
+                onToggle={toggle}
+              >
+                {bnplCards.map(c => g(c.account_code) ? (
+                  <BSRow key={c.id} label={c.name} val={g(c.account_code)} indent color="#fca5a5" />
+                ) : null)}
+              </BSCollapsibleGroup>
             )}
-            {bnplCards.map(c => g(c.account_code) ? (
-              <BSRow key={c.id} label={c.name} val={g(c.account_code)} indent color="#fca5a5" />
-            ) : null)}
 
-            {/* Other current liabilities */}
             {otherCL.map(c => g(c) ? <BSRow key={c} label={COA[c]?.name} val={g(c)} indent color="#fca5a5" /> : null)}
 
             <BSSubtotal label="รวมหนี้สินหมุนเวียน" val={clTotal} color="#ef4444" />
 
             <BSGroup label="หนี้สินไม่หมุนเวียน" total={nclTotal} />
-            {NCL.map(c => g(c) ? <BSRow key={c} label={COA[c]?.name} val={g(c)} indent color="#fca5a5" /> : null)}
-            <BSSubtotal label="รวมหนี้สินไม่หมุนเวียน" val={nclTotal} color="#ef4444" />
 
+            {/* สินเชื่อบ้าน — collapsible if individual loans exist */}
+            {homeTotal > 0 && (
+              homeLoans.length > 0 ? (
+                <BSCollapsibleGroup
+                  label="🏠 สินเชื่อบ้าน"
+                  total={homeTotal}
+                  groupKey="home"
+                  collapsed={!!collapsed.home}
+                  onToggle={toggle}
+                >
+                  {homeLoans.map(l => g(l.account_code) ? (
+                    <BSRow key={l.id} label={l.name} val={g(l.account_code)} indent color="#fca5a5" />
+                  ) : null)}
+                </BSCollapsibleGroup>
+              ) : (
+                <BSRow label={COA["2210"]?.name} val={g("2210")} indent color="#fca5a5" />
+              )
+            )}
+
+            {/* สินเชื่อรถ — collapsible if individual loans exist */}
+            {carTotal > 0 && (
+              carLoans.length > 0 ? (
+                <BSCollapsibleGroup
+                  label="🚗 สินเชื่อรถ"
+                  total={carTotal}
+                  groupKey="car"
+                  collapsed={!!collapsed.car}
+                  onToggle={toggle}
+                >
+                  {carLoans.map(l => g(l.account_code) ? (
+                    <BSRow key={l.id} label={l.name} val={g(l.account_code)} indent color="#fca5a5" />
+                  ) : null)}
+                </BSCollapsibleGroup>
+              ) : (
+                <BSRow label={COA["2220"]?.name} val={g("2220")} indent color="#fca5a5" />
+              )
+            )}
+
+            {/* เงินกู้ส่วนบุคคล — collapsible if individual loans exist */}
+            {personalTotal > 0 && (
+              personalLoans.length > 0 ? (
+                <BSCollapsibleGroup
+                  label="💼 เงินกู้ส่วนบุคคล"
+                  total={personalTotal}
+                  groupKey="personal"
+                  collapsed={!!collapsed.personal}
+                  onToggle={toggle}
+                >
+                  {personalLoans.map(l => g(l.account_code) ? (
+                    <BSRow key={l.id} label={l.name} val={g(l.account_code)} indent color="#fca5a5" />
+                  ) : null)}
+                </BSCollapsibleGroup>
+              ) : (
+                <BSRow label={COA["2230"]?.name} val={g("2230")} indent color="#fca5a5" />
+              )
+            )}
+
+            <BSSubtotal label="รวมหนี้สินไม่หมุนเวียน" val={nclTotal} color="#ef4444" />
             <BSTotal label="รวมหนี้สินทั้งหมด" val={totalLiab} color="#ef4444" />
           </BSCard>
 
@@ -165,11 +245,27 @@ function BSGroup({ label, total }: { label: string; total: number }) {
     </div>
   );
 }
-function BSSubGroup({ label, total }: { label: string; total: number }) {
+function BSCollapsibleGroup({ label, total, groupKey, collapsed, onToggle, children }: {
+  label: string; total: number; groupKey: string; collapsed: boolean; onToggle: (k: string) => void; children: React.ReactNode;
+}) {
   return (
-    <div className="flex justify-between px-4 py-1 text-xs" style={{ background: "#0f1f38", borderTop: "0.5px solid #16243a", color: "#7dd3fc" }}>
-      <span>{label}</span><span>{THB(total)}</span>
-    </div>
+    <>
+      <button
+        onClick={() => onToggle(groupKey)}
+        className="w-full flex justify-between items-center px-4 py-1 text-xs"
+        style={{ background: "#0f1f38", borderTop: "0.5px solid #16243a", color: "#7dd3fc", cursor: "pointer" }}
+      >
+        <span className="flex items-center gap-1.5">
+          <span style={{ fontSize: 9, opacity: 0.7 }}>{collapsed ? "▶" : "▼"}</span>
+          {label}
+          <span className="px-1.5 py-0.5 rounded text-xs" style={{ background: "#1e3a5f", color: "#93c5fd", fontSize: 9 }}>
+            {collapsed ? "ขยาย" : "ยุบ"}
+          </span>
+        </span>
+        <span>{THB(total)}</span>
+      </button>
+      {!collapsed && children}
+    </>
   );
 }
 function BSRow({ label, val, indent, color, empty }: { label?: string; val: number; indent?: boolean; color?: string; empty?: boolean }) {
