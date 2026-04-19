@@ -9,26 +9,38 @@ const BANK_TYPES: Record<string, string> = {
   savings: "ออมทรัพย์", fixed: "ฝากประจำ", current: "กระแสรายวัน", other: "อื่นๆ",
 };
 
-// Scenarios that need special dual-PM handling (card + bank)
-const DUAL_PM_SCENS = ["pay_cc", "pay_bnpl"];
-// Scenarios that create a new card entity
+const DUAL_PM_SCENS  = ["pay_cc", "pay_bnpl"];
 const CARD_SETUP_SCENS = ["ob_cc", "ob_bnpl"];
+const TRANSFER_SCENS = ["transfer_bank"];
+const LOAN_SETUP_SCENS = ["ob_loan_personal", "ob_loan_home", "ob_loan_car"];
+
+const LOAN_TYPE_MAP: Record<string, string> = {
+  ob_loan_personal: "personal",
+  ob_loan_home:     "home",
+  ob_loan_car:      "car",
+};
+
+const LOAN_LABEL_MAP: Record<string, string> = {
+  ob_loan_personal: "เงินกู้ส่วนบุคคล",
+  ob_loan_home:     "สินเชื่อบ้าน",
+  ob_loan_car:      "สินเชื่อรถ",
+};
 
 function getPMPool(
   s: Scenario,
   ccCards: { id: string; name: string; card_type: string; account_code: string }[],
   userBanks: { id: string; name: string; type: string; account_code: string }[],
 ) {
+  const cashPM = [{ id: "cash:1110", name: "💵 เงินสด", acct: "1110" }];
   const bankPM = userBanks.map(b => ({ id: "bank:" + b.id, name: `🏦 ${b.name} (${BANK_TYPES[b.type] ?? b.type})`, acct: b.account_code }));
   const ccPM   = ccCards.map(c => ({ id: "cc:" + c.id, name: `${c.card_type === "bnpl" ? "🛒" : "💳"} ${c.name}`, acct: c.account_code }));
 
-  if (s.pmRole === "receive")     return bankPM;
+  if (s.pmRole === "receive")     return [...cashPM, ...bankPM];
   if (s.pmRole === "asset_acct")  return PM_ASSET_ACCT;
   if (s.pmRole === "liab_acct")   return PM_LIAB_ACCT;
-  // pay_cc / pay_bnpl: CR = bank only (card selector handled separately)
   if (DUAL_PM_SCENS.includes(s.id)) return bankPM;
-  // generic pay: banks + cards
-  if (s.pmRole === "pay") return [...bankPM, ...ccPM];
+  if (TRANSFER_SCENS.includes(s.id)) return [...cashPM, ...bankPM];
+  if (s.pmRole === "pay") return [...cashPM, ...bankPM, ...ccPM];
   return [];
 }
 
@@ -37,6 +49,7 @@ function resolvePM(
   ccCards: { id: string; name: string; account_code: string }[],
   userBanks: { id: string; name: string; type: string; account_code: string }[],
 ) {
+  if (pmId === "cash:1110") return { id: "cash:1110", name: "💵 เงินสด", acct: "1110" };
   if (pmId.startsWith("cc:")) {
     const c = ccCards.find(x => "cc:" + x.id === pmId);
     return c ? { id: pmId, name: "💳 " + c.name, acct: c.account_code } : undefined;
@@ -67,7 +80,7 @@ function resolveEntry(
 }
 
 export default function JournalPage() {
-  const { txns, ccCards, userBanks, userCreatedAt, addCCCard, addUserBank, addTransaction, deleteTransaction, summary, loading } = useFinance();
+  const { txns, ccCards, userBanks, userLiabs, userCreatedAt, addCCCard, addUserBank, addUserLiab, addTransaction, deleteTransaction, summary, loading } = useFinance();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ date: "", desc: "", scenId: "", pmId: "", amount: "" });
   // ob_bank
@@ -77,6 +90,10 @@ export default function JournalPage() {
   const [cardName, setCardName] = useState("");
   // pay_cc / pay_bnpl — card selector for DR
   const [payCardId, setPayCardId] = useState("");
+  // transfer_bank — destination account (DR)
+  const [transferToId, setTransferToId] = useState("");
+  // ob_loan_* — loan name
+  const [loanName, setLoanName] = useState("");
   // ob_asset / ob_liab sub-label
   const [subLabel, setSubLabel] = useState("");
   const [err, setErr] = useState("");
@@ -86,14 +103,16 @@ export default function JournalPage() {
   const isObBank    = form.scenId === "ob_bank";
   const isCardSetup = CARD_SETUP_SCENS.includes(form.scenId);
   const isDualPay   = DUAL_PM_SCENS.includes(form.scenId);
+  const isTransfer  = TRANSFER_SCENS.includes(form.scenId);
+  const isLoanSetup = LOAN_SETUP_SCENS.includes(form.scenId);
   const cardType    = form.scenId === "ob_bnpl" || form.scenId === "pay_bnpl" ? "bnpl" : "credit";
   const availablePayCards = ccCards.filter(c => c.card_type === cardType);
 
-  const pmPool  = scen && !isObBank && !isCardSetup ? getPMPool(scen, ccCards, userBanks) : [];
-  const entry   = scen && !isObBank && !isCardSetup && !isDualPay
+  const pmPool  = scen && !isObBank && !isCardSetup && !isLoanSetup ? getPMPool(scen, ccCards, userBanks) : [];
+  const entry   = scen && !isObBank && !isCardSetup && !isDualPay && !isTransfer && !isLoanSetup
     ? resolveEntry(scen, form.pmId, ccCards, userBanks)
     : null;
-  const needsPM = scen && scen.pmRole !== "none" && !isObBank && !isCardSetup;
+  const needsPM = scen && scen.pmRole !== "none" && !isObBank && !isCardSetup && !isLoanSetup;
 
   const groups = useMemo(() => {
     const g: Record<string, Scenario[]> = {};
@@ -111,12 +130,14 @@ export default function JournalPage() {
     }));
     setBankName(""); setBankType("savings");
     setCardName(""); setPayCardId(""); setSubLabel("");
+    setTransferToId(""); setLoanName("");
   }
 
   function resetForm() {
     setForm({ date: "", desc: "", scenId: "", pmId: "", amount: "" });
     setBankName(""); setBankType("savings");
     setCardName(""); setPayCardId(""); setSubLabel(""); setErr("");
+    setTransferToId(""); setLoanName("");
   }
 
   async function submit() {
@@ -151,6 +172,34 @@ export default function JournalPage() {
       resetForm(); setOpen(false); setSaving(false); return;
     }
 
+    // --- ob_loan_* ---
+    if (isLoanSetup) {
+      if (!loanName.trim()) { setErr("กรุณาระบุชื่อสินเชื่อ"); setSaving(false); return; }
+      const loanType = LOAN_TYPE_MAP[form.scenId];
+      const { liab, error: liabErr } = await addUserLiab(loanName.trim(), loanType);
+      if (liabErr || !liab) { setErr(liabErr?.message || "สร้างสินเชื่อไม่สำเร็จ"); setSaving(false); return; }
+      if (amt > 0) {
+        const label = `🏦 ${liab.name}`;
+        const { error } = await addTransaction({ date: form.date, description: form.desc || `หนี้${liab.name} เริ่มต้น`, dr_account: "3100", cr_account: liab.account_code, dr_name: "Opening Equity", cr_name: label, amount: amt, is_system: false });
+        if (error) { setErr(error.message); setSaving(false); return; }
+      }
+      resetForm(); setOpen(false); setSaving(false); return;
+    }
+
+    // --- transfer_bank (dual PM: both sides bank/cash) ---
+    if (isTransfer) {
+      const toAcct  = resolvePM(transferToId, ccCards, userBanks);
+      const fromAcct = resolvePM(form.pmId, ccCards, userBanks);
+      if (!toAcct)   { setErr("กรุณาเลือกบัญชีปลายทาง (รับเงิน)"); setSaving(false); return; }
+      if (!fromAcct) { setErr("กรุณาเลือกบัญชีต้นทาง (หักออก)"); setSaving(false); return; }
+      if (toAcct.id === fromAcct.id) { setErr("บัญชีต้นทางและปลายทางต้องไม่เหมือนกัน"); setSaving(false); return; }
+      if (amt <= 0)  { setErr("จำนวนเงินต้องมากกว่า 0"); setSaving(false); return; }
+      const { error } = await addTransaction({ date: form.date, description: form.desc || `โอน ${fromAcct.name} → ${toAcct.name}`, dr_account: toAcct.acct, cr_account: fromAcct.acct, dr_name: toAcct.name, cr_name: fromAcct.name, amount: amt, is_system: false });
+      if (error) setErr(error.message);
+      else { resetForm(); setOpen(false); }
+      setSaving(false); return;
+    }
+
     // --- pay_cc / pay_bnpl (dual PM) ---
     if (isDualPay) {
       const card = ccCards.find(c => c.id === payCardId);
@@ -182,9 +231,11 @@ export default function JournalPage() {
 
   if (loading || !summary) return <AppShell><div className="text-sm" style={{ color: "#455672" }}>กำลังโหลด...</div></AppShell>;
 
-  // Dual-PM preview
   const dualPayCard = isDualPay ? ccCards.find(c => c.id === payCardId) : null;
   const dualPayBank = isDualPay ? resolvePM(form.pmId, ccCards, userBanks) : null;
+  const transferTo   = isTransfer ? resolvePM(transferToId, ccCards, userBanks) : null;
+  const transferFrom = isTransfer ? resolvePM(form.pmId, ccCards, userBanks) : null;
+  const transferPool = isTransfer ? getPMPool(SCENARIOS.find(s => s.id === "transfer_bank")!, ccCards, userBanks) : [];
 
   return (
     <AppShell netWorth={summary.totalEquity} netIncome={summary.netIncome} balanced={summary.balanced}>
@@ -261,6 +312,21 @@ export default function JournalPage() {
             </div>
           )}
 
+          {/* ob_loan_*: loan name */}
+          {isLoanSetup && (
+            <div className="mb-3">
+              <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>
+                ชื่อสินเชื่อ / ชื่อธนาคารผู้ให้กู้
+              </label>
+              <input type="text" value={loanName} onChange={e => setLoanName(e.target.value)}
+                placeholder={form.scenId === "ob_loan_home" ? "เช่น บ้านรังสิต — ออมสิน, คอนโด สาทร — SCB..." : form.scenId === "ob_loan_car" ? "เช่น Toyota HR-V — KBank, Honda City — TTB..." : "เช่น สินเชื่อส่วนบุคคล KBank, สินเชื่อ SCB Easy..."}
+                style={{ textAlign: "left" }} />
+              <div className="mt-1.5 text-xs px-2 py-1.5 rounded" style={{ background: "#0a1628", color: "#60a5fa", borderLeft: "2px solid #3b82f6" }}>
+                จะสร้าง account แยกสำหรับ{LOAN_LABEL_MAP[form.scenId]}นี้โดยเฉพาะ
+              </div>
+            </div>
+          )}
+
           {/* pay_cc / pay_bnpl: card selector (DR) */}
           {isDualPay && (
             <div className="mb-3">
@@ -280,8 +346,28 @@ export default function JournalPage() {
             </div>
           )}
 
+          {/* transfer_bank: destination (DR) selector */}
+          {isTransfer && (
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>บัญชีปลายทาง (รับเงิน) DR</label>
+                <select value={transferToId} onChange={e => setTransferToId(e.target.value)}>
+                  <option value="">— เลือก —</option>
+                  {transferPool.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>บัญชีต้นทาง (หักออก) CR</label>
+                <select value={form.pmId} onChange={e => set("pmId", e.target.value)}>
+                  <option value="">— เลือก —</option>
+                  {transferPool.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+            </div>
+          )}
+
           {/* Normal PM selector */}
-          {!isObBank && !isCardSetup && (
+          {!isObBank && !isCardSetup && !isLoanSetup && !isTransfer && (
             <div className="mb-3">
               <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>
                 {isDualPay ? "บัญชีธนาคารที่โอนจ่าย" : (scen?.pmLabel || "ช่องทาง")}{!needsPM && !isDualPay && " (ไม่จำเป็น)"}
@@ -329,6 +415,24 @@ export default function JournalPage() {
             />
           )}
 
+          {/* Preview: ob_loan_* */}
+          {isLoanSetup && loanName.trim() && parseFloat(form.amount) > 0 && (
+            <PreviewRow
+              dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>3100</span><span className="text-xs" style={{ color: "#fca5a5" }}>Opening Equity</span></>}
+              cr={<><span className="font-bold text-xs mr-1" style={{ color: "#f87171" }}>22xx</span><span className="text-xs" style={{ color: "#fca5a5" }}>🏦 {loanName}</span></>}
+              amt={parseFloat(form.amount || "0")}
+            />
+          )}
+
+          {/* Preview: transfer_bank */}
+          {isTransfer && transferTo && transferFrom && parseFloat(form.amount) > 0 && (
+            <PreviewRow
+              dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>{transferTo.acct}</span><span className="text-xs" style={{ color: "#93c5fd" }}>{transferTo.name}</span></>}
+              cr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>{transferFrom.acct}</span><span className="text-xs" style={{ color: "#fca5a5" }}>{transferFrom.name}</span></>}
+              amt={parseFloat(form.amount || "0")}
+            />
+          )}
+
           {/* Preview: pay_cc / pay_bnpl */}
           {isDualPay && dualPayCard && dualPayBank && parseFloat(form.amount) > 0 && (
             <PreviewRow
@@ -339,7 +443,7 @@ export default function JournalPage() {
           )}
 
           {/* Preview: normal entries */}
-          {!isObBank && !isCardSetup && !isDualPay && entry && parseFloat(form.amount) > 0 && (
+          {!isObBank && !isCardSetup && !isDualPay && !isTransfer && !isLoanSetup && entry && parseFloat(form.amount) > 0 && (
             <PreviewRow
               dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>{entry.dr}</span><span className="text-xs" style={{ color: "#93c5fd" }}>{entry.drName}</span></>}
               cr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>{entry.cr}</span><span className="text-xs" style={{ color: "#fca5a5" }}>{entry.crName}</span></>}

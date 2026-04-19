@@ -5,27 +5,42 @@ import { useFinance } from "@/lib/useFinance";
 import { COA, netBal, THB, fmt } from "@/lib/balance";
 
 export default function RecurringPage() {
-  const { schedules, ccCards, userBanks, summary, loading, addSchedule, deleteSchedule, confirmSchedInterest } = useFinance();
+  const { schedules, ccCards, userBanks, userLiabs, summary, loading, addSchedule, deleteSchedule, confirmSchedInterest } = useFinance();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", liabId: "", bankId: "", rate: "", total: "", defInt: "", day: "", next: "" });
   const [confirmInts, setConfirmInts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
+  const homeLoans     = userLiabs.filter(l => l.type === "home");
+  const carLoans      = userLiabs.filter(l => l.type === "car");
+  const personalLoans = userLiabs.filter(l => l.type === "personal");
+
   const liabOptions = [
-    { id: "2210", label: "สินเชื่อบ้าน" },
-    { id: "2220", label: "สินเชื่อรถ" },
-    { id: "2230", label: "เงินกู้ส่วนบุคคล" },
-    { id: "2120", label: "BNPL" },
+    // Show individual home loans if any, otherwise show parent
+    ...(homeLoans.length > 0
+      ? homeLoans.map(l => ({ id: "ul:" + l.id, label: "🏠 " + l.name }))
+      : [{ id: "2210", label: "🏠 สินเชื่อบ้าน" }]),
+    // Show individual car loans if any, otherwise show parent
+    ...(carLoans.length > 0
+      ? carLoans.map(l => ({ id: "ul:" + l.id, label: "🚗 " + l.name }))
+      : [{ id: "2220", label: "🚗 สินเชื่อรถ" }]),
+    // Show individual personal loans if any, otherwise show parent
+    ...(personalLoans.length > 0
+      ? personalLoans.map(l => ({ id: "ul:" + l.id, label: "💼 " + l.name }))
+      : [{ id: "2230", label: "💼 เงินกู้ส่วนบุคคล" }]),
+    { id: "2120", label: "🛒 BNPL" },
     ...ccCards.map(c => ({ id: "cc:" + c.id, label: "💳 " + c.name })),
   ];
 
   function resolveLibName(liabId: string) {
     if (liabId.startsWith("cc:")) return ccCards.find(c => "cc:" + c.id === liabId)?.name || "บัตรเครดิต";
+    if (liabId.startsWith("ul:")) return userLiabs.find(l => "ul:" + l.id === liabId)?.name || liabId;
     return COA[liabId]?.name || liabId;
   }
   function resolveLibAcct(liabId: string) {
     if (liabId.startsWith("cc:")) return ccCards.find(c => "cc:" + c.id === liabId)?.account_code || "2110";
+    if (liabId.startsWith("ul:")) return userLiabs.find(l => "ul:" + l.id === liabId)?.account_code || liabId;
     return liabId;
   }
 
