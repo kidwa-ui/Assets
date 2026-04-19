@@ -10,7 +10,7 @@ const EXP_FIXED_CODES = ["5510","5520","5530"];
 
 export default function PLPage() {
   const { summary, loading } = useFinance();
-  const [expCollapsed, setExpCollapsed] = useState(false);
+  const [expCollapsed, setExpCollapsed] = useState(true);
   if (loading || !summary) return <AppShell><div className="text-sm" style={{ color: "#455672" }}>กำลังโหลด...</div></AppShell>;
 
   const { balances, totalInc, totalExp, netIncome, totalEquity, balanced } = summary;
