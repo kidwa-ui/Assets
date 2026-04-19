@@ -45,7 +45,7 @@ function resolvePM(
     const b = userBanks.find(x => "bank:" + x.id === pmId);
     return b ? { id: pmId, name: `🏦 ${b.name} (${BANK_TYPES[b.type] ?? b.type})`, acct: b.account_code } : undefined;
   }
-  return [...PM_ASSET_ACCT, ...PM_LIAB_ACCT].find(p => p.id === pmId);
+  return PM_ASSET_ACCT.find(p => p.id === pmId);
 }
 
 function resolveEntry(
