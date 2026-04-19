@@ -135,6 +135,12 @@ export function useFinance() {
     return { error };
   };
 
+  const updateTransaction = async (id: string, fields: Partial<Pick<Transaction, "date" | "description" | "amount">>): Promise<{ error: { message: string } | null }> => {
+    const { error } = await supabase.from("transactions").update(fields).eq("id", id);
+    if (!error) setTxns(p => p.map(t => t.id === id ? { ...t, ...fields } : t));
+    return { error };
+  };
+
   const deleteTransaction = async (id: string) => {
     await supabase.from("transactions").delete().eq("id", id);
     setTxns(p => p.filter(t => t.id !== id));
@@ -297,7 +303,7 @@ export function useFinance() {
     userBanks, addUserBank, deleteUserBank,
     ccCards, ccStatements, schedules, queueItems,
     userLiabs, addUserLiab, deleteUserLiab,
-    addTransaction, deleteTransaction,
+    addTransaction, updateTransaction, deleteTransaction,
     addCCCard, deleteCCCard, syncCCStatement,
     addSchedule, deleteSchedule, confirmSchedInterest,
     confirmQueueItem, skipQueueItem,

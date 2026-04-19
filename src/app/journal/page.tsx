@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { useFinance } from "@/lib/useFinance";
 import { THB, fmt, COA, netBal } from "@/lib/balance";
@@ -67,8 +67,11 @@ function resolveEntry(
 }
 
 export default function JournalPage() {
-  const { txns, ccCards, userBanks, userLiabs, userCreatedAt, addCCCard, addUserBank, addUserLiab, addTransaction, deleteTransaction, summary, loading } = useFinance();
+  const { txns, ccCards, userBanks, userLiabs, userCreatedAt, addCCCard, addUserBank, addUserLiab, addTransaction, updateTransaction, deleteTransaction, summary, loading } = useFinance();
   const [open, setOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ date: "", desc: "", amount: "" });
+  const [editSaving, setEditSaving] = useState(false);
   const [form, setForm] = useState({ date: "", desc: "", scenId: "", pmId: "", amount: "" });
   // ob_bank
   const [bankName, setBankName] = useState("");
@@ -484,28 +487,81 @@ export default function JournalPage() {
               {txns.length === 0 ? (
                 <tr><td colSpan={6} className="px-4 py-6 text-sm text-center" style={{ color: "#455672" }}>ยังไม่มีรายการ</td></tr>
               ) : [...txns].reverse().map((t, i) => (
-                <tr key={t.id} style={{ background: i % 2 === 0 ? "transparent" : "#0f1828" }}>
-                  <td className="px-3 py-2 text-xs whitespace-nowrap" style={{ color: "#455672" }}>{t.date}</td>
-                  <td className="px-3 py-2 text-xs">
-                    {t.is_system && <span className="inline-block px-1.5 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#0f2200", color: "#a3e635", fontSize: 9 }}>auto</span>}
-                    <span style={{ color: "#cdd5e0" }}>{t.description}</span>
-                  </td>
-                  <td className="px-3 py-2 text-xs">
-                    <span className="inline-block px-1.5 py-0.5 rounded font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa", fontSize: 10 }}>{t.dr_account}</span>
-                    <span style={{ color: "#93c5fd" }}>{t.dr_name}</span>
-                  </td>
-                  <td className="px-3 py-2 text-xs">
-                    <span className="inline-block px-1.5 py-0.5 rounded font-bold mr-1" style={{ background: "#3f1515", color: "#f87171", fontSize: 10 }}>{t.cr_account}</span>
-                    <span style={{ color: "#fca5a5" }}>{t.cr_name}</span>
-                  </td>
-                  <td className="px-3 py-2 text-xs font-medium text-right whitespace-nowrap" style={{ color: "#e2e8f0" }}>{fmt(t.amount)}</td>
-                  <td className="px-3 py-2 text-right">
-                    {!t.is_system && (
-                      <button onClick={() => { if (confirm("ลบรายการนี้?")) deleteTransaction(t.id!); }}
-                        className="text-xs px-2 py-0.5 rounded" style={{ color: "#ef4444", border: "0.5px solid #ef444433" }}>✕</button>
-                    )}
-                  </td>
-                </tr>
+                <React.Fragment key={t.id}>
+                  <tr style={{ background: i % 2 === 0 ? "transparent" : "#0f1828" }}>
+                    <td className="px-3 py-2 text-xs whitespace-nowrap" style={{ color: "#455672" }}>{t.date}</td>
+                    <td className="px-3 py-2 text-xs">
+                      {t.is_system && <span className="inline-block px-1.5 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#0f2200", color: "#a3e635", fontSize: 9 }}>auto</span>}
+                      <span style={{ color: "#cdd5e0" }}>{t.description}</span>
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      <span className="inline-block px-1.5 py-0.5 rounded font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa", fontSize: 10 }}>{t.dr_account}</span>
+                      <span style={{ color: "#93c5fd" }}>{t.dr_name}</span>
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      <span className="inline-block px-1.5 py-0.5 rounded font-bold mr-1" style={{ background: "#3f1515", color: "#f87171", fontSize: 10 }}>{t.cr_account}</span>
+                      <span style={{ color: "#fca5a5" }}>{t.cr_name}</span>
+                    </td>
+                    <td className="px-3 py-2 text-xs font-medium text-right whitespace-nowrap" style={{ color: "#e2e8f0" }}>{fmt(t.amount)}</td>
+                    <td className="px-3 py-2 text-right whitespace-nowrap">
+                      {!t.is_system && (
+                        <span className="inline-flex gap-1">
+                          <button
+                            onClick={() => {
+                              if (editId === t.id) { setEditId(null); return; }
+                              setEditId(t.id!);
+                              setEditForm({ date: t.date, desc: t.description, amount: String(t.amount) });
+                            }}
+                            className="text-xs px-2 py-0.5 rounded"
+                            style={{ color: editId === t.id ? "#f59e0b" : "#60a5fa", border: `0.5px solid ${editId === t.id ? "#f59e0b44" : "#60a5fa33"}` }}
+                          >✏️</button>
+                          <button onClick={() => { if (confirm("ลบรายการนี้?")) deleteTransaction(t.id!); }}
+                            className="text-xs px-2 py-0.5 rounded" style={{ color: "#ef4444", border: "0.5px solid #ef444433" }}>✕</button>
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                  {editId === t.id && (
+                    <tr style={{ background: "#0a1628" }}>
+                      <td colSpan={6} className="px-3 py-3">
+                        <div className="flex gap-2 flex-wrap items-end">
+                          <div>
+                            <div className="text-xs mb-1" style={{ color: "#455672" }}>วันที่</div>
+                            <input type="date" value={editForm.date} onChange={e => setEditForm(p => ({ ...p, date: e.target.value }))}
+                              style={{ width: 130 }} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 160 }}>
+                            <div className="text-xs mb-1" style={{ color: "#455672" }}>รายการ</div>
+                            <input type="text" value={editForm.desc} onChange={e => setEditForm(p => ({ ...p, desc: e.target.value }))}
+                              style={{ textAlign: "left", width: "100%" }} />
+                          </div>
+                          <div>
+                            <div className="text-xs mb-1" style={{ color: "#455672" }}>จำนวน ฿</div>
+                            <input type="number" value={editForm.amount} onChange={e => setEditForm(p => ({ ...p, amount: e.target.value }))}
+                              min="0" style={{ width: 100 }} />
+                          </div>
+                          <button
+                            disabled={editSaving}
+                            onClick={async () => {
+                              const amt = parseFloat(editForm.amount);
+                              if (!editForm.date || isNaN(amt) || amt <= 0) return;
+                              setEditSaving(true);
+                              await updateTransaction(t.id!, { date: editForm.date, description: editForm.desc, amount: amt });
+                              setEditSaving(false);
+                              setEditId(null);
+                            }}
+                            className="px-3 py-1.5 rounded text-sm font-medium text-white"
+                            style={{ background: "#2563eb", opacity: editSaving ? 0.6 : 1 }}
+                          >{editSaving ? "..." : "บันทึก"}</button>
+                          <button onClick={() => setEditId(null)}
+                            className="px-3 py-1.5 rounded text-sm" style={{ background: "#0f1828", color: "#455672", border: "0.5px solid #16243a" }}>
+                            ยกเลิก
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
