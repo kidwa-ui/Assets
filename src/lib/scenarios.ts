@@ -11,6 +11,8 @@ export interface Scenario {
 }
 
 export const SCENARIOS: Scenario[] = [
+  // โอนเงิน — first so it appears at top of dropdown
+  { id: "transfer_bank", group: "🔄 โอนเงิน",  label: "โอนเงินระหว่างบัญชี",          dr: "PM",  cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีต้นทาง (หักออก)", hint: "DR = บัญชีปลายทาง (รับเงิน), CR = บัญชีต้นทาง (หักออก)" },
   // รายรับ
   { id: "salary",    group: "💰 รายรับ",        label: "เงินเดือน",                    dr: "PM",  cr: "4100", pmRole: "receive", pmLabel: "บัญชีที่รับเงินเข้า" },
   { id: "freelance", group: "💰 รายรับ",        label: "Freelance / Event",            dr: "PM",  cr: "4200", pmRole: "receive", pmLabel: "บัญชีที่รับเงินเข้า" },
@@ -24,8 +26,6 @@ export const SCENARIOS: Scenario[] = [
   { id: "expense",   group: "💸 ค่าใช้จ่าย",   label: "ค่าใช้จ่ายทั่วไป",             dr: "5000",cr: "PM",   pmRole: "pay",     pmLabel: "ช่องทางที่จ่ายเงิน" },
   { id: "interest",  group: "💸 ค่าใช้จ่าย",   label: "ดอกเบี้ยจ่าย (บัตร/สินเชื่อ)", dr: "5510",cr: "PM",   pmRole: "pay",     pmLabel: "หนี้ที่เพิ่มดอกเบี้ย", hint: "เลือกบัตรเครดิต / BNPL / สินเชื่อที่มีดอกเบี้ยเพิ่ม" },
   { id: "fee",       group: "💸 ค่าใช้จ่าย",   label: "ค่าธรรมเนียมธนาคาร",           dr: "5520",cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีที่ถูกหัก" },
-  // โอนเงิน
-  { id: "transfer_bank", group: "🔄 โอนเงิน",  label: "โอนเงินระหว่างบัญชี",          dr: "PM",  cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีต้นทาง (หักออก)", hint: "DR = บัญชีปลายทาง (รับเงิน), CR = บัญชีต้นทาง (หักออก)" },
   // ชำระหนี้ — pay_cc / pay_bnpl ถูก handle เป็น special case ใน journal form
   { id: "pay_cc",    group: "💳 ชำระหนี้",      label: "จ่ายบิลบัตรเครดิต",            dr: "2110",cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีธนาคารที่โอนจ่าย", hint: "ไม่ใช่ Expense — แค่แลกหนี้บัตรเป็นเงินสด" },
   { id: "pay_bnpl",  group: "💳 ชำระหนี้",      label: "จ่ายคืน BNPL / Pay Later",     dr: "2120",cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีธนาคารที่โอนจ่าย" },

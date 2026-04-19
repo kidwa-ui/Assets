@@ -2,7 +2,7 @@
 import { useState, useMemo } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { useFinance } from "@/lib/useFinance";
-import { THB, fmt, COA } from "@/lib/balance";
+import { THB, fmt, COA, netBal } from "@/lib/balance";
 import { SCENARIOS, PM_ASSET_ACCT, type Scenario } from "@/lib/scenarios";
 
 const BANK_TYPES: Record<string, string> = {
@@ -222,6 +222,9 @@ export default function JournalPage() {
   const transferTo   = isTransfer ? resolvePM(transferToId, ccCards, userBanks) : null;
   const transferFrom = isTransfer ? resolvePM(form.pmId, ccCards, userBanks) : null;
   const transferPool = isTransfer ? getPMPool(SCENARIOS.find(s => s.id === "transfer_bank")!, ccCards, userBanks) : [];
+  // Balance of selected source account for display
+  const xferBankCOA  = Object.fromEntries(userBanks.map(b => [b.account_code, { name: b.name, type: "asset" as const, normal: "debit" as const }]));
+  const transferFromBal = transferFrom ? netBal(summary.balances, transferFrom.acct, xferBankCOA) : null;
 
   return (
     <AppShell netWorth={summary.totalEquity} netIncome={summary.netIncome} balanced={summary.balanced}>
@@ -337,19 +340,24 @@ export default function JournalPage() {
             </div>
           )}
 
-          {/* transfer_bank: destination (DR) selector */}
+          {/* transfer_bank: source left, destination right */}
           {isTransfer && (
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
-                <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>บัญชีปลายทาง (รับเงิน) DR</label>
-                <select value={transferToId} onChange={e => setTransferToId(e.target.value)}>
+                <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>บัญชีต้นทาง (หักออก) CR</label>
+                <select value={form.pmId} onChange={e => set("pmId", e.target.value)}>
                   <option value="">— เลือก —</option>
                   {transferPool.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
+                {transferFrom && transferFromBal !== null && (
+                  <div className="mt-1 text-xs px-2 py-1 rounded" style={{ background: "#0a1628", color: "#60a5fa" }}>
+                    คงเหลือ: <span className="font-medium">{THB(transferFromBal)}</span>
+                  </div>
+                )}
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>บัญชีต้นทาง (หักออก) CR</label>
-                <select value={form.pmId} onChange={e => set("pmId", e.target.value)}>
+                <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>บัญชีปลายทาง (รับเงิน) DR</label>
+                <select value={transferToId} onChange={e => setTransferToId(e.target.value)}>
                   <option value="">— เลือก —</option>
                   {transferPool.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
