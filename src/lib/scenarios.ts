@@ -46,10 +46,7 @@ export const SCENARIOS: Scenario[] = [
   { id: "ob_asset",  group: "📂 Opening Balance", label: "สินทรัพย์ถาวรเริ่มต้น (NBV)",        dr: "PM",  cr: "3100", pmRole: "asset_acct", pmLabel: "เลือก account สินทรัพย์", hint: "เช่น ยานพาหนะ / อุปกรณ์ IT / ทองคำ" },
   { id: "ob_cc",     group: "📂 Opening Balance", label: "บัตรเครดิตเริ่มต้น",                 dr: "3100",cr: "PM",   pmRole: "none" },
   { id: "ob_bnpl",   group: "📂 Opening Balance", label: "BNPL / Pay Later เริ่มต้น",          dr: "3100",cr: "PM",   pmRole: "none" },
-  { id: "ob_liab",   group: "📂 Opening Balance", label: "หนี้สินเริ่มต้น (รวม/อื่นๆ)",        dr: "3100",cr: "PM",   pmRole: "liab_acct", pmLabel: "เลือก account หนี้สิน" },
-  { id: "ob_loan_personal", group: "📂 Opening Balance", label: "เงินกู้ส่วนบุคคลเริ่มต้น (ตั้งชื่อรายการ)", dr: "3100", cr: "PM", pmRole: "none", hint: "สร้าง account ใหม่สำหรับสินเชื่อแต่ละรายการ" },
-  { id: "ob_loan_home",     group: "📂 Opening Balance", label: "สินเชื่อบ้านเริ่มต้น (ตั้งชื่อรายการ)",    dr: "3100", cr: "PM", pmRole: "none", hint: "สร้าง account ใหม่สำหรับสินเชื่อแต่ละรายการ" },
-  { id: "ob_loan_car",      group: "📂 Opening Balance", label: "สินเชื่อรถเริ่มต้น (ตั้งชื่อรายการ)",     dr: "3100", cr: "PM", pmRole: "none", hint: "สร้าง account ใหม่สำหรับสินเชื่อแต่ละรายการ" },
+  { id: "ob_liab",   group: "📂 Opening Balance", label: "หนี้สินเริ่มต้น (สินเชื่อ)",          dr: "3100",cr: "PM",   pmRole: "none", hint: "ตั้งชื่อสินเชื่อแต่ละรายการ เช่น บ้านหลัง 1 — ออมสิน, Toyota Yaris — KBank" },
 ];
 
 export const PM_ASSET_ACCT = [

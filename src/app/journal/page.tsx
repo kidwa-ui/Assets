@@ -3,7 +3,7 @@ import { useState, useMemo } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { useFinance } from "@/lib/useFinance";
 import { THB, fmt, COA } from "@/lib/balance";
-import { SCENARIOS, PM_ASSET_ACCT, PM_LIAB_ACCT, type Scenario } from "@/lib/scenarios";
+import { SCENARIOS, PM_ASSET_ACCT, type Scenario } from "@/lib/scenarios";
 
 const BANK_TYPES: Record<string, string> = {
   savings: "ออมทรัพย์", fixed: "ฝากประจำ", current: "กระแสรายวัน", other: "อื่นๆ",
@@ -12,19 +12,7 @@ const BANK_TYPES: Record<string, string> = {
 const DUAL_PM_SCENS  = ["pay_cc", "pay_bnpl"];
 const CARD_SETUP_SCENS = ["ob_cc", "ob_bnpl"];
 const TRANSFER_SCENS = ["transfer_bank"];
-const LOAN_SETUP_SCENS = ["ob_loan_personal", "ob_loan_home", "ob_loan_car"];
-
-const LOAN_TYPE_MAP: Record<string, string> = {
-  ob_loan_personal: "personal",
-  ob_loan_home:     "home",
-  ob_loan_car:      "car",
-};
-
-const LOAN_LABEL_MAP: Record<string, string> = {
-  ob_loan_personal: "เงินกู้ส่วนบุคคล",
-  ob_loan_home:     "สินเชื่อบ้าน",
-  ob_loan_car:      "สินเชื่อรถ",
-};
+const LIAB_SETUP_SCENS = ["ob_liab"];
 
 function getPMPool(
   s: Scenario,
@@ -37,7 +25,6 @@ function getPMPool(
 
   if (s.pmRole === "receive")     return [...cashPM, ...bankPM];
   if (s.pmRole === "asset_acct")  return PM_ASSET_ACCT;
-  if (s.pmRole === "liab_acct")   return PM_LIAB_ACCT;
   if (DUAL_PM_SCENS.includes(s.id)) return bankPM;
   if (TRANSFER_SCENS.includes(s.id)) return [...cashPM, ...bankPM];
   if (s.pmRole === "pay") return [...cashPM, ...bankPM, ...ccPM];
@@ -92,9 +79,10 @@ export default function JournalPage() {
   const [payCardId, setPayCardId] = useState("");
   // transfer_bank — destination account (DR)
   const [transferToId, setTransferToId] = useState("");
-  // ob_loan_* — loan name
+  // ob_liab — individual loan name + type
   const [loanName, setLoanName] = useState("");
-  // ob_asset / ob_liab sub-label
+  const [loanType, setLoanType] = useState("personal");
+  // ob_asset sub-label
   const [subLabel, setSubLabel] = useState("");
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
@@ -104,15 +92,15 @@ export default function JournalPage() {
   const isCardSetup = CARD_SETUP_SCENS.includes(form.scenId);
   const isDualPay   = DUAL_PM_SCENS.includes(form.scenId);
   const isTransfer  = TRANSFER_SCENS.includes(form.scenId);
-  const isLoanSetup = LOAN_SETUP_SCENS.includes(form.scenId);
+  const isLiabSetup = LIAB_SETUP_SCENS.includes(form.scenId);
   const cardType    = form.scenId === "ob_bnpl" || form.scenId === "pay_bnpl" ? "bnpl" : "credit";
   const availablePayCards = ccCards.filter(c => c.card_type === cardType);
 
-  const pmPool  = scen && !isObBank && !isCardSetup && !isLoanSetup ? getPMPool(scen, ccCards, userBanks) : [];
-  const entry   = scen && !isObBank && !isCardSetup && !isDualPay && !isTransfer && !isLoanSetup
+  const pmPool  = scen && !isObBank && !isCardSetup && !isLiabSetup ? getPMPool(scen, ccCards, userBanks) : [];
+  const entry   = scen && !isObBank && !isCardSetup && !isDualPay && !isTransfer && !isLiabSetup
     ? resolveEntry(scen, form.pmId, ccCards, userBanks)
     : null;
-  const needsPM = scen && scen.pmRole !== "none" && !isObBank && !isCardSetup && !isLoanSetup;
+  const needsPM = scen && scen.pmRole !== "none" && !isObBank && !isCardSetup && !isLiabSetup;
 
   const groups = useMemo(() => {
     const g: Record<string, Scenario[]> = {};
@@ -130,14 +118,14 @@ export default function JournalPage() {
     }));
     setBankName(""); setBankType("savings");
     setCardName(""); setPayCardId(""); setSubLabel("");
-    setTransferToId(""); setLoanName("");
+    setTransferToId(""); setLoanName(""); setLoanType("personal");
   }
 
   function resetForm() {
     setForm({ date: "", desc: "", scenId: "", pmId: "", amount: "" });
     setBankName(""); setBankType("savings");
     setCardName(""); setPayCardId(""); setSubLabel(""); setErr("");
-    setTransferToId(""); setLoanName("");
+    setTransferToId(""); setLoanName(""); setLoanType("personal");
   }
 
   async function submit() {
@@ -172,15 +160,13 @@ export default function JournalPage() {
       resetForm(); setOpen(false); setSaving(false); return;
     }
 
-    // --- ob_loan_* ---
-    if (isLoanSetup) {
+    // --- ob_liab: individual named loan ---
+    if (isLiabSetup) {
       if (!loanName.trim()) { setErr("กรุณาระบุชื่อสินเชื่อ"); setSaving(false); return; }
-      const loanType = LOAN_TYPE_MAP[form.scenId];
       const { liab, error: liabErr } = await addUserLiab(loanName.trim(), loanType);
       if (liabErr || !liab) { setErr(liabErr?.message || "สร้างสินเชื่อไม่สำเร็จ"); setSaving(false); return; }
       if (amt > 0) {
-        const label = `🏦 ${liab.name}`;
-        const { error } = await addTransaction({ date: form.date, description: form.desc || `หนี้${liab.name} เริ่มต้น`, dr_account: "3100", cr_account: liab.account_code, dr_name: "Opening Equity", cr_name: label, amount: amt, is_system: false });
+        const { error } = await addTransaction({ date: form.date, description: form.desc || `หนี้${liab.name} เริ่มต้น`, dr_account: "3100", cr_account: liab.account_code, dr_name: "Opening Equity", cr_name: liab.name, amount: amt, is_system: false });
         if (error) { setErr(error.message); setSaving(false); return; }
       }
       resetForm(); setOpen(false); setSaving(false); return;
@@ -312,17 +298,22 @@ export default function JournalPage() {
             </div>
           )}
 
-          {/* ob_loan_*: loan name */}
-          {isLoanSetup && (
-            <div className="mb-3">
-              <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>
-                ชื่อสินเชื่อ / ชื่อธนาคารผู้ให้กู้
-              </label>
-              <input type="text" value={loanName} onChange={e => setLoanName(e.target.value)}
-                placeholder={form.scenId === "ob_loan_home" ? "เช่น บ้านรังสิต — ออมสิน, คอนโด สาทร — SCB..." : form.scenId === "ob_loan_car" ? "เช่น Toyota HR-V — KBank, Honda City — TTB..." : "เช่น สินเชื่อส่วนบุคคล KBank, สินเชื่อ SCB Easy..."}
-                style={{ textAlign: "left" }} />
-              <div className="mt-1.5 text-xs px-2 py-1.5 rounded" style={{ background: "#0a1628", color: "#60a5fa", borderLeft: "2px solid #3b82f6" }}>
-                จะสร้าง account แยกสำหรับ{LOAN_LABEL_MAP[form.scenId]}นี้โดยเฉพาะ
+          {/* ob_liab: loan type + individual name */}
+          {isLiabSetup && (
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>ประเภทสินเชื่อ</label>
+                <select value={loanType} onChange={e => setLoanType(e.target.value)}>
+                  <option value="home">🏠 สินเชื่อบ้าน</option>
+                  <option value="car">🚗 สินเชื่อรถ</option>
+                  <option value="personal">💼 เงินกู้ส่วนบุคคล</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>ชื่อสินเชื่อ / ธนาคาร</label>
+                <input type="text" value={loanName} onChange={e => setLoanName(e.target.value)}
+                  placeholder={loanType === "home" ? "เช่น บ้านรังสิต — ออมสิน..." : loanType === "car" ? "เช่น Toyota Yaris — KBank..." : "เช่น สินเชื่อ SCB Easy..."}
+                  style={{ textAlign: "left" }} />
               </div>
             </div>
           )}
@@ -367,7 +358,7 @@ export default function JournalPage() {
           )}
 
           {/* Normal PM selector */}
-          {!isObBank && !isCardSetup && !isLoanSetup && !isTransfer && (
+          {!isObBank && !isCardSetup && !isLiabSetup && !isTransfer && (
             <div className="mb-3">
               <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>
                 {isDualPay ? "บัญชีธนาคารที่โอนจ่าย" : (scen?.pmLabel || "ช่องทาง")}{!needsPM && !isDualPay && " (ไม่จำเป็น)"}
@@ -385,14 +376,12 @@ export default function JournalPage() {
             </div>
           )}
 
-          {/* Sub-label for ob_asset / ob_liab */}
-          {(scen?.id === "ob_asset" || scen?.id === "ob_liab") && (
+          {/* Sub-label for ob_asset only */}
+          {scen?.id === "ob_asset" && (
             <div className="mb-3">
-              <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>
-                {scen.id === "ob_asset" ? "ชื่อ/รายละเอียดสินทรัพย์ (ไม่บังคับ)" : "ชื่อ/สถาบัน/รายละเอียด (ไม่บังคับ)"}
-              </label>
+              <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>ชื่อ/รายละเอียดสินทรัพย์ (ไม่บังคับ)</label>
               <input type="text" value={subLabel} onChange={e => setSubLabel(e.target.value)}
-                placeholder={scen.id === "ob_asset" ? "เช่น Toyota Fortuner, บ้านสุขุมวิท..." : "เช่น บ้านรังสิต — ธนาคารออมสิน, รถ Honda HR-V..."}
+                placeholder="เช่น Toyota Fortuner, บ้านสุขุมวิท..."
                 style={{ textAlign: "left" }} />
             </div>
           )}
@@ -415,11 +404,11 @@ export default function JournalPage() {
             />
           )}
 
-          {/* Preview: ob_loan_* */}
-          {isLoanSetup && loanName.trim() && parseFloat(form.amount) > 0 && (
+          {/* Preview: ob_liab */}
+          {isLiabSetup && loanName.trim() && parseFloat(form.amount) > 0 && (
             <PreviewRow
               dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>3100</span><span className="text-xs" style={{ color: "#fca5a5" }}>Opening Equity</span></>}
-              cr={<><span className="font-bold text-xs mr-1" style={{ color: "#f87171" }}>22xx</span><span className="text-xs" style={{ color: "#fca5a5" }}>🏦 {loanName}</span></>}
+              cr={<><span className="font-bold text-xs mr-1" style={{ color: "#f87171" }}>22xx</span><span className="text-xs" style={{ color: "#fca5a5" }}>{loanName}</span></>}
               amt={parseFloat(form.amount || "0")}
             />
           )}
@@ -443,7 +432,7 @@ export default function JournalPage() {
           )}
 
           {/* Preview: normal entries */}
-          {!isObBank && !isCardSetup && !isDualPay && !isTransfer && !isLoanSetup && entry && parseFloat(form.amount) > 0 && (
+          {!isObBank && !isCardSetup && !isDualPay && !isTransfer && !isLiabSetup && entry && parseFloat(form.amount) > 0 && (
             <PreviewRow
               dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>{entry.dr}</span><span className="text-xs" style={{ color: "#93c5fd" }}>{entry.drName}</span></>}
               cr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>{entry.cr}</span><span className="text-xs" style={{ color: "#fca5a5" }}>{entry.crName}</span></>}

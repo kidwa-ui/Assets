@@ -79,20 +79,28 @@ export default function BalanceSheetPage() {
         <BSCard>
           <BSHeader bg="#14532d">สินทรัพย์ / Assets</BSHeader>
 
-          <BSGroup label="สินทรัพย์หมุนเวียน" total={caTotal} />
-          {cashBal ? <BSRow label="เงินสดติดตัว" val={cashBal} indent /> : null}
-          {bankBals.filter(b => b.bal > 0).map(b => (
-            <BSRow key={b.id} label={`${b.name} (${BANK_TYPES[b.type] ?? b.type})`} val={b.bal} indent />
-          ))}
-          {otherCA.map(c => g(c) ? <BSRow key={c} label={COA[c]?.name} val={g(c)} indent /> : null)}
+          {/* สินทรัพย์หมุนเวียน — collapsible */}
+          <BSCollapsibleGroup label="สินทรัพย์หมุนเวียน" total={caTotal} groupKey="ca" collapsed={!!collapsed.ca} onToggle={toggle} accent="#22c55e">
+            {cashBal ? <BSRow label="เงินสดติดตัว" val={cashBal} indent /> : null}
+            {bankBals.filter(b => b.bal > 0).map(b => (
+              <BSRow key={b.id} label={`${b.name} (${BANK_TYPES[b.type] ?? b.type})`} val={b.bal} indent />
+            ))}
+            {otherCA.map(c => g(c) ? <BSRow key={c} label={COA[c]?.name} val={g(c)} indent /> : null)}
+          </BSCollapsibleGroup>
           <BSSubtotal label="รวมสินทรัพย์หมุนเวียน" val={caTotal} color="#22c55e" />
 
-          <BSGroup label="เงินลงทุน" total={invTotal} />
-          {INV.map(c => g(c) ? <BSRow key={c} label={COA[c]?.name} val={g(c)} indent /> : null)}
-          {invTotal ? <BSSubtotal label="รวมเงินลงทุน" val={invTotal} color="#22c55e" /> : <BSRow label="—" val={0} empty />}
+          {/* เงินลงทุน — collapsible */}
+          <BSCollapsibleGroup label="เงินลงทุน" total={invTotal} groupKey="inv" collapsed={!!collapsed.inv} onToggle={toggle} accent="#22c55e">
+            {INV.map(c => g(c) ? <BSRow key={c} label={COA[c]?.name} val={g(c)} indent /> : null)}
+            {!invTotal && <BSRow label="—" val={0} empty />}
+          </BSCollapsibleGroup>
+          {invTotal ? <BSSubtotal label="รวมเงินลงทุน" val={invTotal} color="#22c55e" /> : null}
 
-          <BSGroup label="สินทรัพย์ไม่หมุนเวียน" total={fixTotal} />
-          {FIX.map(c => g(c) ? <BSRow key={c} label={COA[c]?.name} val={g(c)} indent /> : null)}
+          {/* สินทรัพย์ไม่หมุนเวียน — collapsible */}
+          <BSCollapsibleGroup label="สินทรัพย์ไม่หมุนเวียน" total={fixTotal} groupKey="fix" collapsed={!!collapsed.fix} onToggle={toggle} accent="#22c55e">
+            {FIX.map(c => g(c) ? <BSRow key={c} label={COA[c]?.name} val={g(c)} indent /> : null)}
+            {!fixTotal && <BSRow label="—" val={0} empty />}
+          </BSCollapsibleGroup>
           <BSSubtotal label="รวมสินทรัพย์ไม่หมุนเวียน" val={fixTotal} color="#22c55e" />
 
           <BSTotal label="รวมสินทรัพย์ทั้งหมด" val={totalAssets} color="#22c55e" />
@@ -107,13 +115,7 @@ export default function BalanceSheetPage() {
 
             {/* บัตรเครดิต — collapsible */}
             {creditCards.length > 0 && (
-              <BSCollapsibleGroup
-                label="💳 บัตรเครดิต"
-                total={ccTotal}
-                groupKey="cc"
-                collapsed={!!collapsed.cc}
-                onToggle={toggle}
-              >
+              <BSCollapsibleGroup label="💳 บัตรเครดิต" total={ccTotal} groupKey="cc" collapsed={!!collapsed.cc} onToggle={toggle}>
                 {creditCards.map(c => g(c.account_code) ? (
                   <BSRow key={c.id} label={c.name} val={g(c.account_code)} indent color="#fca5a5" />
                 ) : null)}
@@ -122,13 +124,7 @@ export default function BalanceSheetPage() {
 
             {/* BNPL — collapsible */}
             {bnplCards.length > 0 && (
-              <BSCollapsibleGroup
-                label="🛒 BNPL / Pay Later"
-                total={bnplTotal}
-                groupKey="bnpl"
-                collapsed={!!collapsed.bnpl}
-                onToggle={toggle}
-              >
+              <BSCollapsibleGroup label="🛒 BNPL / Pay Later" total={bnplTotal} groupKey="bnpl" collapsed={!!collapsed.bnpl} onToggle={toggle}>
                 {bnplCards.map(c => g(c.account_code) ? (
                   <BSRow key={c.id} label={c.name} val={g(c.account_code)} indent color="#fca5a5" />
                 ) : null)}
@@ -136,21 +132,14 @@ export default function BalanceSheetPage() {
             )}
 
             {otherCL.map(c => g(c) ? <BSRow key={c} label={COA[c]?.name} val={g(c)} indent color="#fca5a5" /> : null)}
-
             <BSSubtotal label="รวมหนี้สินหมุนเวียน" val={clTotal} color="#ef4444" />
 
             <BSGroup label="หนี้สินไม่หมุนเวียน" total={nclTotal} />
 
-            {/* สินเชื่อบ้าน — collapsible if individual loans exist */}
+            {/* สินเชื่อบ้าน */}
             {homeTotal > 0 && (
               homeLoans.length > 0 ? (
-                <BSCollapsibleGroup
-                  label="🏠 สินเชื่อบ้าน"
-                  total={homeTotal}
-                  groupKey="home"
-                  collapsed={!!collapsed.home}
-                  onToggle={toggle}
-                >
+                <BSCollapsibleGroup label="🏠 สินเชื่อบ้าน" total={homeTotal} groupKey="home" collapsed={!!collapsed.home} onToggle={toggle}>
                   {homeLoans.map(l => g(l.account_code) ? (
                     <BSRow key={l.id} label={l.name} val={g(l.account_code)} indent color="#fca5a5" />
                   ) : null)}
@@ -160,16 +149,10 @@ export default function BalanceSheetPage() {
               )
             )}
 
-            {/* สินเชื่อรถ — collapsible if individual loans exist */}
+            {/* สินเชื่อรถ */}
             {carTotal > 0 && (
               carLoans.length > 0 ? (
-                <BSCollapsibleGroup
-                  label="🚗 สินเชื่อรถ"
-                  total={carTotal}
-                  groupKey="car"
-                  collapsed={!!collapsed.car}
-                  onToggle={toggle}
-                >
+                <BSCollapsibleGroup label="🚗 สินเชื่อรถ" total={carTotal} groupKey="car" collapsed={!!collapsed.car} onToggle={toggle}>
                   {carLoans.map(l => g(l.account_code) ? (
                     <BSRow key={l.id} label={l.name} val={g(l.account_code)} indent color="#fca5a5" />
                   ) : null)}
@@ -179,16 +162,10 @@ export default function BalanceSheetPage() {
               )
             )}
 
-            {/* เงินกู้ส่วนบุคคล — collapsible if individual loans exist */}
+            {/* เงินกู้ส่วนบุคคล */}
             {personalTotal > 0 && (
               personalLoans.length > 0 ? (
-                <BSCollapsibleGroup
-                  label="💼 เงินกู้ส่วนบุคคล"
-                  total={personalTotal}
-                  groupKey="personal"
-                  collapsed={!!collapsed.personal}
-                  onToggle={toggle}
-                >
+                <BSCollapsibleGroup label="💼 เงินกู้ส่วนบุคคล" total={personalTotal} groupKey="personal" collapsed={!!collapsed.personal} onToggle={toggle}>
                   {personalLoans.map(l => g(l.account_code) ? (
                     <BSRow key={l.id} label={l.name} val={g(l.account_code)} indent color="#fca5a5" />
                   ) : null)}
@@ -245,23 +222,25 @@ function BSGroup({ label, total }: { label: string; total: number }) {
     </div>
   );
 }
-function BSCollapsibleGroup({ label, total, groupKey, collapsed, onToggle, children }: {
-  label: string; total: number; groupKey: string; collapsed: boolean; onToggle: (k: string) => void; children: React.ReactNode;
+function BSCollapsibleGroup({ label, total, groupKey, collapsed, onToggle, children, accent }: {
+  label: string; total: number; groupKey: string; collapsed: boolean;
+  onToggle: (k: string) => void; children: React.ReactNode; accent?: string;
 }) {
+  // Style differs: assets use green-tinted header, liabilities use blue-tinted subgroup
+  const isAsset = !!accent;
   return (
     <>
       <button
         onClick={() => onToggle(groupKey)}
-        className="w-full flex justify-between items-center px-4 py-1 text-xs"
-        style={{ background: "#0f1f38", borderTop: "0.5px solid #16243a", color: "#7dd3fc", cursor: "pointer" }}
+        className="w-full flex justify-between items-center px-4 py-1.5 text-xs font-medium"
+        style={{
+          background: isAsset ? "#0f1828" : "#0f1f38",
+          borderTop: "0.5px solid #16243a",
+          color: isAsset ? "#455672" : "#7dd3fc",
+          cursor: "pointer",
+        }}
       >
-        <span className="flex items-center gap-1.5">
-          <span style={{ fontSize: 9, opacity: 0.7 }}>{collapsed ? "▶" : "▼"}</span>
-          {label}
-          <span className="px-1.5 py-0.5 rounded text-xs" style={{ background: "#1e3a5f", color: "#93c5fd", fontSize: 9 }}>
-            {collapsed ? "ขยาย" : "ยุบ"}
-          </span>
-        </span>
+        <span>{label} <span style={{ opacity: 0.6 }}>{collapsed ? "▶" : "▼"}</span></span>
         <span>{THB(total)}</span>
       </button>
       {!collapsed && children}
