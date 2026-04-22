@@ -20,6 +20,7 @@ function getPMPool(
   s: Scenario,
   ccCards: { id: string; name: string; card_type: string; account_code: string }[],
   userBanks: { id: string; name: string; type: string; account_code: string }[],
+  userLiabs: { id: string; name: string; type: string; account_code: string }[] = [],
 ) {
   const cashPM = [{ id: "cash:1110", name: "💵 เงินสด", acct: "1110" }];
   const bankPM = userBanks.map(b => ({ id: "bank:" + b.id, name: `🏦 ${b.name} (${BANK_TYPES[b.type] ?? b.type})`, acct: b.account_code }));
@@ -29,23 +30,34 @@ function getPMPool(
   if (s.pmRole === "asset_acct")  return PM_ASSET_ACCT;
   if (DUAL_PM_SCENS.includes(s.id)) return bankPM;
   if (TRANSFER_SCENS.includes(s.id)) return [...cashPM, ...bankPM];
+  if (s.pmRole === "liab_cr") {
+    const loanEmoji: Record<string, string> = { home: "🏠", car: "🚗", personal: "💼" };
+    const liabPM = userLiabs.map(l => ({ id: "ul:" + l.id, name: `${loanEmoji[l.type] ?? "💼"} ${l.name}`, acct: l.account_code }));
+    return [...ccPM, ...liabPM];
+  }
   if (s.pmRole === "pay") return [...cashPM, ...bankPM, ...ccPM];
   return [];
 }
 
 function resolvePM(
   pmId: string,
-  ccCards: { id: string; name: string; account_code: string }[],
+  ccCards: { id: string; name: string; card_type?: string; account_code: string }[],
   userBanks: { id: string; name: string; type: string; account_code: string }[],
+  userLiabs: { id: string; name: string; type: string; account_code: string }[] = [],
 ) {
   if (pmId === "cash:1110") return { id: "cash:1110", name: "💵 เงินสด", acct: "1110" };
   if (pmId.startsWith("cc:")) {
     const c = ccCards.find(x => "cc:" + x.id === pmId);
-    return c ? { id: pmId, name: "💳 " + c.name, acct: c.account_code } : undefined;
+    return c ? { id: pmId, name: `${c.card_type === "bnpl" ? "🛒" : "💳"} ${c.name}`, acct: c.account_code } : undefined;
   }
   if (pmId.startsWith("bank:")) {
     const b = userBanks.find(x => "bank:" + x.id === pmId);
     return b ? { id: pmId, name: `🏦 ${b.name} (${BANK_TYPES[b.type] ?? b.type})`, acct: b.account_code } : undefined;
+  }
+  if (pmId.startsWith("ul:")) {
+    const loanEmoji: Record<string, string> = { home: "🏠", car: "🚗", personal: "💼" };
+    const l = userLiabs.find(x => "ul:" + x.id === pmId);
+    return l ? { id: pmId, name: `${loanEmoji[l.type] ?? "💼"} ${l.name}`, acct: l.account_code } : undefined;
   }
   return PM_ASSET_ACCT.find(p => p.id === pmId);
 }
@@ -55,8 +67,9 @@ function resolveEntry(
   pmId: string,
   ccCards: { id: string; name: string; account_code: string }[],
   userBanks: { id: string; name: string; type: string; account_code: string }[],
+  userLiabs: { id: string; name: string; type: string; account_code: string }[] = [],
 ) {
-  const pm = resolvePM(pmId, ccCards, userBanks);
+  const pm = resolvePM(pmId, ccCards, userBanks, userLiabs);
   if (scen.pmRole !== "none" && !pm) return null;
   const dr = scen.dr === "PM" ? pm?.acct : scen.dr;
   const cr = scen.cr === "PM" ? pm?.acct : scen.cr;
@@ -105,9 +118,9 @@ export default function JournalPage() {
   const availablePayCards = ccCards.filter(c => c.card_type === cardType);
   const availablePayLoans = userLiabs.filter(l => l.type === (LIAB_PAY_TYPE[form.scenId] ?? ""));
 
-  const pmPool  = scen && !isObBank && !isCardSetup && !isLiabSetup ? getPMPool(scen, ccCards, userBanks) : [];
+  const pmPool  = scen && !isObBank && !isCardSetup && !isLiabSetup ? getPMPool(scen, ccCards, userBanks, userLiabs) : [];
   const entry   = scen && !isObBank && !isCardSetup && !isDualPay && !isTransfer && !isLiabSetup
-    ? resolveEntry(scen, form.pmId, ccCards, userBanks)
+    ? resolveEntry(scen, form.pmId, ccCards, userBanks, userLiabs)
     : null;
   const needsPM = scen && scen.pmRole !== "none" && !isObBank && !isCardSetup && !isLiabSetup;
 
