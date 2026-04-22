@@ -202,8 +202,8 @@ export default function CreditCardsPage() {
         </div>
       )}
 
-      <CardSection cards={creditCards} emoji="💳" typeLabel="บัตรเครดิต" />
-      <CardSection cards={bnplCards}   emoji="🛒" typeLabel="BNPL / Pay Later" />
+      {CardSection({ cards: creditCards, emoji: "💳", typeLabel: "บัตรเครดิต" })}
+      {CardSection({ cards: bnplCards,   emoji: "🛒", typeLabel: "BNPL / Pay Later" })}
 
       {/* History */}
       {ccStatements.length > 0 && (
