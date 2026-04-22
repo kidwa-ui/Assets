@@ -4,7 +4,7 @@ export interface Scenario {
   label: string;
   dr: string;
   cr: string;
-  pmRole: "receive" | "pay" | "asset_acct" | "liab_acct" | "none";
+  pmRole: "receive" | "pay" | "asset_acct" | "liab_acct" | "liab_cr" | "none";
   pmLabel?: string;
   hint?: string;
   isAsset?: boolean;
@@ -39,7 +39,7 @@ export const SCENARIOS: Scenario[] = [
   { id: "exp_pet",      group: "💸 ค่าใช้จ่าย",   label: "🐶 สัตว์เลี้ยง",                       dr: "5014", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
   { id: "exp_gift",     group: "💸 ค่าใช้จ่าย",   label: "🎁 ของขวัญ / บริจาค / ทำบุญ",          dr: "5015", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
   { id: "expense",      group: "💸 ค่าใช้จ่าย",   label: "💸 ค่าใช้จ่ายอื่นๆ",                   dr: "5000", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
-  { id: "interest",  group: "💸 ค่าใช้จ่าย",   label: "ดอกเบี้ยจ่าย (บัตร/สินเชื่อ)", dr: "5510",cr: "PM",   pmRole: "pay",     pmLabel: "หนี้ที่เพิ่มดอกเบี้ย", hint: "เลือกบัตรเครดิต / BNPL / สินเชื่อที่มีดอกเบี้ยเพิ่ม" },
+  { id: "interest",  group: "💸 ค่าใช้จ่าย",   label: "ดอกเบี้ยจ่าย (บัตร/สินเชื่อ)", dr: "5510",cr: "PM",   pmRole: "liab_cr", pmLabel: "หนี้ที่เพิ่มดอกเบี้ย", hint: "เลือกบัตรเครดิต / BNPL / สินเชื่อที่มีดอกเบี้ยเพิ่ม" },
   { id: "fee",       group: "💸 ค่าใช้จ่าย",   label: "ค่าธรรมเนียมธนาคาร",           dr: "5520",cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีที่ถูกหัก" },
   // ชำระหนี้ — pay_cc / pay_bnpl ถูก handle เป็น special case ใน journal form
   { id: "pay_cc",    group: "💳 ชำระหนี้",      label: "จ่ายบิลบัตรเครดิต",            dr: "2110",cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีธนาคารที่โอนจ่าย", hint: "ไม่ใช่ Expense — แค่แลกหนี้บัตรเป็นเงินสด" },
