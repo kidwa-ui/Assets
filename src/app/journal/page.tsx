@@ -9,10 +9,12 @@ const BANK_TYPES: Record<string, string> = {
   savings: "ออมทรัพย์", fixed: "ฝากประจำ", current: "กระแสรายวัน", other: "อื่นๆ",
 };
 
-const DUAL_PM_SCENS  = ["pay_cc", "pay_bnpl"];
+const DUAL_PM_SCENS   = ["pay_cc", "pay_bnpl"];
 const CARD_SETUP_SCENS = ["ob_cc", "ob_bnpl"];
-const TRANSFER_SCENS = ["transfer_bank"];
+const TRANSFER_SCENS  = ["transfer_bank"];
 const LIAB_SETUP_SCENS = ["ob_liab"];
+const LIAB_PAY_SCENS  = ["pay_loan", "pay_home", "pay_car"];
+const LIAB_PAY_TYPE: Record<string, string> = { pay_loan: "personal", pay_home: "home", pay_car: "car" };
 
 function getPMPool(
   s: Scenario,
@@ -80,6 +82,8 @@ export default function JournalPage() {
   const [cardName, setCardName] = useState("");
   // pay_cc / pay_bnpl — card selector for DR
   const [payCardId, setPayCardId] = useState("");
+  // pay_loan / pay_home / pay_car — individual loan selector for DR
+  const [payLoanId, setPayLoanId] = useState("");
   // transfer_bank — destination account (DR)
   const [transferToId, setTransferToId] = useState("");
   // ob_liab — individual loan name + type
@@ -96,8 +100,10 @@ export default function JournalPage() {
   const isDualPay   = DUAL_PM_SCENS.includes(form.scenId);
   const isTransfer  = TRANSFER_SCENS.includes(form.scenId);
   const isLiabSetup = LIAB_SETUP_SCENS.includes(form.scenId);
+  const isLiabPay   = LIAB_PAY_SCENS.includes(form.scenId);
   const cardType    = form.scenId === "ob_bnpl" || form.scenId === "pay_bnpl" ? "bnpl" : "credit";
   const availablePayCards = ccCards.filter(c => c.card_type === cardType);
+  const availablePayLoans = userLiabs.filter(l => l.type === (LIAB_PAY_TYPE[form.scenId] ?? ""));
 
   const pmPool  = scen && !isObBank && !isCardSetup && !isLiabSetup ? getPMPool(scen, ccCards, userBanks) : [];
   const entry   = scen && !isObBank && !isCardSetup && !isDualPay && !isTransfer && !isLiabSetup
@@ -120,14 +126,14 @@ export default function JournalPage() {
       date: s?.group === "📂 Opening Balance" && userCreatedAt ? userCreatedAt : p.date,
     }));
     setBankName(""); setBankType("savings");
-    setCardName(""); setPayCardId(""); setSubLabel("");
+    setCardName(""); setPayCardId(""); setPayLoanId(""); setSubLabel("");
     setTransferToId(""); setLoanName(""); setLoanType("personal");
   }
 
   function resetForm() {
     setForm({ date: "", desc: "", scenId: "", pmId: "", amount: "" });
     setBankName(""); setBankType("savings");
-    setCardName(""); setPayCardId(""); setSubLabel(""); setErr("");
+    setCardName(""); setPayCardId(""); setPayLoanId(""); setSubLabel(""); setErr("");
     setTransferToId(""); setLoanName(""); setLoanType("personal");
   }
 
@@ -202,6 +208,23 @@ export default function JournalPage() {
       setSaving(false); return;
     }
 
+    // --- pay_loan / pay_home / pay_car with individual loan selected ---
+    if (isLiabPay && payLoanId) {
+      const loan = userLiabs.find(l => l.id === payLoanId);
+      const bank = resolvePM(form.pmId, ccCards, userBanks);
+      if (!loan) { setErr("ไม่พบสินเชื่อที่เลือก"); setSaving(false); return; }
+      if (!bank) { setErr("กรุณาเลือกบัญชีธนาคารที่โอนจ่าย"); setSaving(false); return; }
+      if (amt <= 0) { setErr("จำนวนเงินต้องมากกว่า 0"); setSaving(false); return; }
+      const { error } = await addTransaction({
+        date: form.date, description: form.desc || `ผ่อน ${loan.name}`,
+        dr_account: loan.account_code, cr_account: bank.acct,
+        dr_name: loan.name, cr_name: bank.name, amount: amt, is_system: false,
+      });
+      if (error) setErr(error.message);
+      else { resetForm(); setOpen(false); }
+      setSaving(false); return;
+    }
+
     // --- Normal case ---
     if (!form.scenId) { setErr("กรุณาเลือกประเภทรายการ"); setSaving(false); return; }
     if (needsPM && !form.pmId) { setErr("กรุณาเลือก" + (scen?.pmLabel || "ช่องทาง")); setSaving(false); return; }
@@ -222,6 +245,8 @@ export default function JournalPage() {
 
   const dualPayCard = isDualPay ? ccCards.find(c => c.id === payCardId) : null;
   const dualPayBank = isDualPay ? resolvePM(form.pmId, ccCards, userBanks) : null;
+  const selectedPayLoan = isLiabPay && payLoanId ? userLiabs.find(l => l.id === payLoanId) : null;
+  const liabPayBank = isLiabPay && form.pmId ? resolvePM(form.pmId, ccCards, userBanks) : null;
   const transferTo   = isTransfer ? resolvePM(transferToId, ccCards, userBanks) : null;
   const transferFrom = isTransfer ? resolvePM(form.pmId, ccCards, userBanks) : null;
   const transferPool = isTransfer ? getPMPool(SCENARIOS.find(s => s.id === "transfer_bank")!, ccCards, userBanks) : [];
@@ -349,6 +374,25 @@ export default function JournalPage() {
             </div>
           )}
 
+          {/* pay_loan / pay_home / pay_car: individual loan selector (DR) */}
+          {isLiabPay && (
+            <div className="mb-3">
+              <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>
+                {form.scenId === "pay_home" ? "สินเชื่อบ้านที่ผ่อน" : form.scenId === "pay_car" ? "สินเชื่อรถที่ผ่อน" : "สินเชื่อที่ชำระ"}
+              </label>
+              {availablePayLoans.length === 0 ? (
+                <div className="text-xs px-3 py-2 rounded" style={{ background: "#1a0800", color: "#fb923c", borderLeft: "2px solid #fb923c" }}>
+                  ยังไม่มีสินเชื่อในประเภทนี้ — บันทึกผ่าน Journal &gt; Opening Balance ก่อน
+                </div>
+              ) : (
+                <select value={payLoanId} onChange={e => setPayLoanId(e.target.value)}>
+                  <option value="">— เลือกสินเชื่อ —</option>
+                  {availablePayLoans.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+              )}
+            </div>
+          )}
+
           {/* transfer_bank: source left, destination right */}
           {isTransfer && (
             <div className="grid grid-cols-2 gap-3 mb-3">
@@ -453,8 +497,17 @@ export default function JournalPage() {
             />
           )}
 
+          {/* Preview: pay_loan/pay_home/pay_car with individual loan */}
+          {isLiabPay && selectedPayLoan && liabPayBank && parseFloat(form.amount) > 0 && (
+            <PreviewRow
+              dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>{selectedPayLoan.account_code}</span><span className="text-xs" style={{ color: "#93c5fd" }}>{selectedPayLoan.name}</span></>}
+              cr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>{liabPayBank.acct}</span><span className="text-xs" style={{ color: "#fca5a5" }}>{liabPayBank.name}</span></>}
+              amt={parseFloat(form.amount || "0")}
+            />
+          )}
+
           {/* Preview: normal entries */}
-          {!isObBank && !isCardSetup && !isDualPay && !isTransfer && !isLiabSetup && entry && parseFloat(form.amount) > 0 && (
+          {!isObBank && !isCardSetup && !isDualPay && !isTransfer && !isLiabSetup && !(isLiabPay && selectedPayLoan) && entry && parseFloat(form.amount) > 0 && (
             <PreviewRow
               dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>{entry.dr}</span><span className="text-xs" style={{ color: "#93c5fd" }}>{entry.drName}</span></>}
               cr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>{entry.cr}</span><span className="text-xs" style={{ color: "#fca5a5" }}>{entry.crName}</span></>}
