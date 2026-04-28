@@ -12,7 +12,9 @@ export interface Scenario {
 
 export const SCENARIOS: Scenario[] = [
   // โอนเงิน — first so it appears at top of dropdown
-  { id: "transfer_bank", group: "🔄 โอนเงิน",  label: "โอนเงินระหว่างบัญชี",          dr: "PM",  cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีต้นทาง (หักออก)", hint: "DR = บัญชีปลายทาง (รับเงิน), CR = บัญชีต้นทาง (หักออก)" },
+  { id: "transfer_bank",  group: "🔄 โอนเงิน", label: "โอนเงินระหว่างบัญชี",                      dr: "PM",   cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีต้นทาง (หักออก)", hint: "DR = บัญชีปลายทาง (รับเงิน), CR = บัญชีต้นทาง (หักออก)" },
+  { id: "receivable_pay", group: "🔄 โอนเงิน", label: "💸 สำรองจ่ายแทนคนอื่น (รอรับเงินคืน)",    dr: "1140", cr: "PM",   pmRole: "pay",     pmLabel: "ช่องทางที่จ่าย", hint: "DR ลูกหนี้ — บันทึกเมื่อจ่ายเงินแทนคนอื่นแล้วรอรับคืน" },
+  { id: "receivable_recv",group: "🔄 โอนเงิน", label: "💰 รับเงินคืน / เก็บเงินลูกหนี้",          dr: "PM",   cr: "1140", pmRole: "receive", pmLabel: "บัญชีที่รับเงินเข้า" },
   // รายรับ
   { id: "salary",    group: "💰 รายรับ",        label: "เงินเดือน",                    dr: "PM",  cr: "4100", pmRole: "receive", pmLabel: "บัญชีที่รับเงินเข้า" },
   { id: "freelance", group: "💰 รายรับ",        label: "Freelance / Event",            dr: "PM",  cr: "4200", pmRole: "receive", pmLabel: "บัญชีที่รับเงินเข้า" },
@@ -37,8 +39,9 @@ export const SCENARIOS: Scenario[] = [
   { id: "exp_home",     group: "💸 ค่าใช้จ่าย",   label: "🏠 ของใช้ในบ้าน / ซ่อมแซม / เฟอร์นิเจอร์", dr: "5012", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
   { id: "exp_edu",      group: "💸 ค่าใช้จ่าย",   label: "📚 การศึกษา / คอร์สออนไลน์ / หนังสือ", dr: "5013", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
   { id: "exp_pet",      group: "💸 ค่าใช้จ่าย",   label: "🐶 สัตว์เลี้ยง",                       dr: "5014", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
-  { id: "exp_gift",     group: "💸 ค่าใช้จ่าย",   label: "🎁 ของขวัญ / บริจาค / ทำบุญ",          dr: "5015", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
-  { id: "expense",      group: "💸 ค่าใช้จ่าย",   label: "💸 ค่าใช้จ่ายอื่นๆ",                   dr: "5000", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
+  { id: "exp_gift",     group: "💸 ค่าใช้จ่าย",   label: "🎁 ของขวัญ / บริจาค / ทำบุญ",              dr: "5015", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
+  { id: "exp_family",   group: "💸 ค่าใช้จ่าย",   label: "👨‍👩‍👧 ให้ครอบครัว / โอนเงินให้พ่อแม่",   dr: "5016", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่โอนเงิน" },
+  { id: "expense",      group: "💸 ค่าใช้จ่าย",   label: "💸 ค่าใช้จ่ายอื่นๆ",                       dr: "5000", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
   { id: "interest",  group: "💸 ค่าใช้จ่าย",   label: "ดอกเบี้ยจ่าย (บัตร/สินเชื่อ)", dr: "5510",cr: "PM",   pmRole: "liab_cr", pmLabel: "หนี้ที่เพิ่มดอกเบี้ย", hint: "เลือกบัตรเครดิต / BNPL / สินเชื่อที่มีดอกเบี้ยเพิ่ม" },
   { id: "fee",       group: "💸 ค่าใช้จ่าย",   label: "ค่าธรรมเนียมธนาคาร",           dr: "5520",cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีที่ถูกหัก" },
   // ชำระหนี้ — pay_cc / pay_bnpl ถูก handle เป็น special case ใน journal form
@@ -55,6 +58,9 @@ export const SCENARIOS: Scenario[] = [
   { id: "buy_gold",  group: "🏠 ซื้อสินทรัพย์", label: "ซื้อทองคำ/ของสะสม",            dr: "1360",cr: "PM",   pmRole: "pay",     pmLabel: "ช่องทางที่จ่าย", isAsset: true },
   { id: "buy_fund",  group: "🏠 ซื้อสินทรัพย์", label: "ซื้อหุ้น/กองทุน (LTF/RMF/SSF)",dr: "1210", cr: "PM",  pmRole: "pay",     pmLabel: "ช่องทางที่จ่าย", isAsset: true },
   { id: "buy_crypto",group: "🏠 ซื้อสินทรัพย์", label: "ซื้อคริปโต",                   dr: "1220",cr: "PM",   pmRole: "pay",     pmLabel: "ช่องทางที่จ่าย", isAsset: true },
+  // เบิกเงินสด / รับวงเงินสินเชื่อ
+  { id: "cash_adv_cc",   group: "🏦 เบิกเงิน / รับสินเชื่อ", label: "💸 เบิกเงินสดจากบัตรเครดิต",          dr: "PM", cr: "PM", pmRole: "pay", hint: "DR บัญชีรับเงิน, CR บัตรเครดิตที่เพิ่มหนี้" },
+  { id: "cash_adv_loan", group: "🏦 เบิกเงิน / รับสินเชื่อ", label: "🏦 รับเงินกู้ / เบิกสินเชื่อ (วงเงินใหม่)", dr: "PM", cr: "PM", pmRole: "pay", hint: "DR บัญชีรับเงิน, CR สินเชื่อที่เพิ่มยอดหนี้" },
   // Opening Balance
   { id: "ob_bank",   group: "📂 Opening Balance", label: "ยอดเงินฝากธนาคารเริ่มต้น",           dr: "1120",cr: "3100", pmRole: "none" },
   { id: "ob_cash",   group: "📂 Opening Balance", label: "ยอดเงินสดเริ่มต้น",                  dr: "1110",cr: "3100", pmRole: "none" },

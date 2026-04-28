@@ -9,12 +9,14 @@ const BANK_TYPES: Record<string, string> = {
   savings: "ออมทรัพย์", fixed: "ฝากประจำ", current: "กระแสรายวัน", other: "อื่นๆ",
 };
 
-const DUAL_PM_SCENS   = ["pay_cc", "pay_bnpl"];
+const DUAL_PM_SCENS    = ["pay_cc", "pay_bnpl"];
 const CARD_SETUP_SCENS = ["ob_cc", "ob_bnpl"];
-const TRANSFER_SCENS  = ["transfer_bank"];
+const TRANSFER_SCENS   = ["transfer_bank"];
 const LIAB_SETUP_SCENS = ["ob_liab"];
-const LIAB_PAY_SCENS  = ["pay_loan", "pay_home", "pay_car"];
+const LIAB_PAY_SCENS   = ["pay_loan", "pay_home", "pay_car"];
 const LIAB_PAY_TYPE: Record<string, string> = { pay_loan: "personal", pay_home: "home", pay_car: "car" };
+const CASH_ADV_CC_SCENS   = ["cash_adv_cc"];
+const CASH_ADV_LOAN_SCENS = ["cash_adv_loan"];
 
 function getPMPool(
   s: Scenario,
@@ -108,21 +110,25 @@ export default function JournalPage() {
   const [saving, setSaving] = useState(false);
 
   const scen = SCENARIOS.find(s => s.id === form.scenId);
-  const isObBank    = form.scenId === "ob_bank";
-  const isCardSetup = CARD_SETUP_SCENS.includes(form.scenId);
-  const isDualPay   = DUAL_PM_SCENS.includes(form.scenId);
-  const isTransfer  = TRANSFER_SCENS.includes(form.scenId);
-  const isLiabSetup = LIAB_SETUP_SCENS.includes(form.scenId);
-  const isLiabPay   = LIAB_PAY_SCENS.includes(form.scenId);
-  const cardType    = form.scenId === "ob_bnpl" || form.scenId === "pay_bnpl" ? "bnpl" : "credit";
+  const isObBank      = form.scenId === "ob_bank";
+  const isCardSetup   = CARD_SETUP_SCENS.includes(form.scenId);
+  const isDualPay     = DUAL_PM_SCENS.includes(form.scenId);
+  const isTransfer    = TRANSFER_SCENS.includes(form.scenId);
+  const isLiabSetup   = LIAB_SETUP_SCENS.includes(form.scenId);
+  const isLiabPay     = LIAB_PAY_SCENS.includes(form.scenId);
+  const isCashAdvCC   = CASH_ADV_CC_SCENS.includes(form.scenId);
+  const isCashAdvLoan = CASH_ADV_LOAN_SCENS.includes(form.scenId);
+  const cardType      = form.scenId === "ob_bnpl" || form.scenId === "pay_bnpl" ? "bnpl" : "credit";
   const availablePayCards = ccCards.filter(c => c.card_type === cardType);
   const availablePayLoans = userLiabs.filter(l => l.type === (LIAB_PAY_TYPE[form.scenId] ?? ""));
+  const advCreditCards    = ccCards.filter(c => c.card_type === "credit");
 
-  const pmPool  = scen && !isObBank && !isCardSetup && !isLiabSetup ? getPMPool(scen, ccCards, userBanks, userLiabs) : [];
-  const entry   = scen && !isObBank && !isCardSetup && !isDualPay && !isTransfer && !isLiabSetup
+  const pmPool  = scen && !isObBank && !isCardSetup && !isLiabSetup && !isCashAdvCC && !isCashAdvLoan
+    ? getPMPool(scen, ccCards, userBanks, userLiabs) : [];
+  const entry   = scen && !isObBank && !isCardSetup && !isDualPay && !isTransfer && !isLiabSetup && !isCashAdvCC && !isCashAdvLoan
     ? resolveEntry(scen, form.pmId, ccCards, userBanks, userLiabs)
     : null;
-  const needsPM = scen && scen.pmRole !== "none" && !isObBank && !isCardSetup && !isLiabSetup;
+  const needsPM = scen && scen.pmRole !== "none" && !isObBank && !isCardSetup && !isLiabSetup && !isCashAdvCC && !isCashAdvLoan;
 
   const groups = useMemo(() => {
     const g: Record<string, Scenario[]> = {};
@@ -208,6 +214,33 @@ export default function JournalPage() {
       setSaving(false); return;
     }
 
+    // --- cash_adv_cc: DR bank/cash, CR credit card ---
+    if (isCashAdvCC) {
+      const card = advCreditCards.find(c => c.id === payCardId);
+      const bank = resolvePM(form.pmId, ccCards, userBanks);
+      if (!card) { setErr("กรุณาเลือกบัตรเครดิตที่เบิกเงิน"); setSaving(false); return; }
+      if (!bank) { setErr("กรุณาเลือกบัญชีที่รับเงิน"); setSaving(false); return; }
+      if (amt <= 0) { setErr("จำนวนเงินต้องมากกว่า 0"); setSaving(false); return; }
+      const { error } = await addTransaction({ date: form.date, description: form.desc || `เบิกเงินสด ${card.name}`, dr_account: bank.acct, cr_account: card.account_code, dr_name: bank.name, cr_name: `💳 ${card.name}`, amount: amt, is_system: false });
+      if (error) setErr(error.message);
+      else { resetForm(); setOpen(false); }
+      setSaving(false); return;
+    }
+
+    // --- cash_adv_loan: DR bank/cash, CR loan ---
+    if (isCashAdvLoan) {
+      const loan = userLiabs.find(l => l.id === payLoanId);
+      const bank = resolvePM(form.pmId, ccCards, userBanks);
+      if (!loan) { setErr("กรุณาเลือกสินเชื่อที่รับวงเงิน"); setSaving(false); return; }
+      if (!bank) { setErr("กรุณาเลือกบัญชีที่รับเงิน"); setSaving(false); return; }
+      if (amt <= 0) { setErr("จำนวนเงินต้องมากกว่า 0"); setSaving(false); return; }
+      const loanEmoji: Record<string, string> = { home: "🏠", car: "🚗", personal: "💼" };
+      const { error } = await addTransaction({ date: form.date, description: form.desc || `รับเงินกู้ ${loan.name}`, dr_account: bank.acct, cr_account: loan.account_code, dr_name: bank.name, cr_name: `${loanEmoji[loan.type] ?? "💼"} ${loan.name}`, amount: amt, is_system: false });
+      if (error) setErr(error.message);
+      else { resetForm(); setOpen(false); }
+      setSaving(false); return;
+    }
+
     // --- pay_cc / pay_bnpl (dual PM) ---
     if (isDualPay) {
       const card = ccCards.find(c => c.id === payCardId);
@@ -258,6 +291,13 @@ export default function JournalPage() {
 
   const dualPayCard = isDualPay ? ccCards.find(c => c.id === payCardId) : null;
   const dualPayBank = isDualPay ? resolvePM(form.pmId, ccCards, userBanks) : null;
+  const advCCCard   = isCashAdvCC   ? advCreditCards.find(c => c.id === payCardId) : null;
+  const advCCBank   = isCashAdvCC   ? resolvePM(form.pmId, ccCards, userBanks) : null;
+  const advLoanItem = isCashAdvLoan ? userLiabs.find(l => l.id === payLoanId) : null;
+  const advLoanBank = isCashAdvLoan ? resolvePM(form.pmId, ccCards, userBanks) : null;
+  const cashAdvPool = (isCashAdvCC || isCashAdvLoan)
+    ? [{ id: "cash:1110", name: "💵 เงินสด", acct: "1110" }, ...userBanks.map(b => ({ id: "bank:" + b.id, name: `🏦 ${b.name} (${BANK_TYPES[b.type] ?? b.type})`, acct: b.account_code }))]
+    : [];
   const selectedPayLoan = isLiabPay && payLoanId ? userLiabs.find(l => l.id === payLoanId) : null;
   const liabPayBank = isLiabPay && form.pmId ? resolvePM(form.pmId, ccCards, userBanks) : null;
   const transferTo   = isTransfer ? resolvePM(transferToId, ccCards, userBanks) : null;
@@ -431,8 +471,56 @@ export default function JournalPage() {
             </div>
           )}
 
+          {/* cash_adv_cc: card selector (CR) + bank selector (DR) */}
+          {isCashAdvCC && (
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>บัตรเครดิตที่เบิกเงิน (CR)</label>
+                {advCreditCards.length === 0 ? (
+                  <div className="text-xs px-3 py-2 rounded" style={{ background: "#1a0800", color: "#fb923c", borderLeft: "2px solid #fb923c" }}>ยังไม่มีบัตรเครดิต — บันทึกผ่าน Opening Balance ก่อน</div>
+                ) : (
+                  <select value={payCardId} onChange={e => setPayCardId(e.target.value)}>
+                    <option value="">— เลือกบัตรเครดิต —</option>
+                    {advCreditCards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                )}
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>บัญชีที่รับเงิน (DR)</label>
+                <select value={form.pmId} onChange={e => set("pmId", e.target.value)}>
+                  <option value="">— เลือกบัญชี —</option>
+                  {cashAdvPool.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* cash_adv_loan: loan selector (CR) + bank selector (DR) */}
+          {isCashAdvLoan && (
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>สินเชื่อที่รับวงเงิน (CR)</label>
+                {userLiabs.length === 0 ? (
+                  <div className="text-xs px-3 py-2 rounded" style={{ background: "#1a0800", color: "#fb923c", borderLeft: "2px solid #fb923c" }}>ยังไม่มีสินเชื่อ — บันทึกผ่าน Opening Balance ก่อน</div>
+                ) : (
+                  <select value={payLoanId} onChange={e => setPayLoanId(e.target.value)}>
+                    <option value="">— เลือกสินเชื่อ —</option>
+                    {userLiabs.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                )}
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>บัญชีที่รับเงิน (DR)</label>
+                <select value={form.pmId} onChange={e => set("pmId", e.target.value)}>
+                  <option value="">— เลือกบัญชี —</option>
+                  {cashAdvPool.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+            </div>
+          )}
+
           {/* Normal PM selector */}
-          {!isObBank && !isCardSetup && !isLiabSetup && !isTransfer && (
+          {!isObBank && !isCardSetup && !isLiabSetup && !isTransfer && !isCashAdvCC && !isCashAdvLoan && (
             <div className="mb-3">
               <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>
                 {isDualPay ? "บัญชีธนาคารที่โอนจ่าย" : (scen?.pmLabel || "ช่องทาง")}{!needsPM && !isDualPay && " (ไม่จำเป็น)"}
@@ -519,8 +607,26 @@ export default function JournalPage() {
             />
           )}
 
+          {/* Preview: cash_adv_cc */}
+          {isCashAdvCC && advCCCard && advCCBank && parseFloat(form.amount) > 0 && (
+            <PreviewRow
+              dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>{advCCBank.acct}</span><span className="text-xs" style={{ color: "#93c5fd" }}>{advCCBank.name}</span></>}
+              cr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>{advCCCard.account_code}</span><span className="text-xs" style={{ color: "#fca5a5" }}>💳 {advCCCard.name}</span></>}
+              amt={parseFloat(form.amount || "0")}
+            />
+          )}
+
+          {/* Preview: cash_adv_loan */}
+          {isCashAdvLoan && advLoanItem && advLoanBank && parseFloat(form.amount) > 0 && (
+            <PreviewRow
+              dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>{advLoanBank.acct}</span><span className="text-xs" style={{ color: "#93c5fd" }}>{advLoanBank.name}</span></>}
+              cr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>{advLoanItem.account_code}</span><span className="text-xs" style={{ color: "#fca5a5" }}>{advLoanItem.name}</span></>}
+              amt={parseFloat(form.amount || "0")}
+            />
+          )}
+
           {/* Preview: normal entries */}
-          {!isObBank && !isCardSetup && !isDualPay && !isTransfer && !isLiabSetup && !(isLiabPay && selectedPayLoan) && entry && parseFloat(form.amount) > 0 && (
+          {!isObBank && !isCardSetup && !isDualPay && !isTransfer && !isLiabSetup && !isCashAdvCC && !isCashAdvLoan && !(isLiabPay && selectedPayLoan) && entry && parseFloat(form.amount) > 0 && (
             <PreviewRow
               dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>{entry.dr}</span><span className="text-xs" style={{ color: "#93c5fd" }}>{entry.drName}</span></>}
               cr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>{entry.cr}</span><span className="text-xs" style={{ color: "#fca5a5" }}>{entry.crName}</span></>}

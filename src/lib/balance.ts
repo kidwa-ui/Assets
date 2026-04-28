@@ -55,6 +55,7 @@ export const COA: Record<string, Account> = {
   "5013": { name: "📚 การศึกษา / คอร์สออนไลน์", type: "expense",  normal: "debit"  },
   "5014": { name: "🐶 สัตว์เลี้ยง",             type: "expense",  normal: "debit"  },
   "5015": { name: "🎁 ของขวัญ / บริจาค",        type: "expense",  normal: "debit"  },
+  "5016": { name: "👨‍👩‍👧 ให้ครอบครัว / ค่าเลี้ยงดู", type: "expense",  normal: "debit"  },
   "5510": { name: "ดอกเบี้ยจ่าย",               type: "expense",  normal: "debit"  },
   "5520": { name: "ค่าธรรมเนียม",        type: "expense",  normal: "debit"  },
   "5530": { name: "ค่าเสื่อมราคา",       type: "expense",  normal: "debit"  },

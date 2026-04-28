@@ -82,7 +82,7 @@ export default function BalanceSheetPage() {
           {/* สินทรัพย์หมุนเวียน — collapsible */}
           <BSCollapsibleGroup label="สินทรัพย์หมุนเวียน" total={caTotal} groupKey="ca" collapsed={!!collapsed.ca} onToggle={toggle} accent="#22c55e">
             {cashBal ? <BSRow label="เงินสดติดตัว" val={cashBal} indent /> : null}
-            {bankBals.filter(b => b.bal > 0).map(b => (
+            {bankBals.map(b => (
               <BSRow key={b.id} label={`${b.name} (${BANK_TYPES[b.type] ?? b.type})`} val={b.bal} indent />
             ))}
             {otherCA.map(c => g(c) ? <BSRow key={c} label={COA[c]?.name} val={g(c)} indent /> : null)}
