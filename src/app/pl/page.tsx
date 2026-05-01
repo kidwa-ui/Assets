@@ -4,7 +4,7 @@ import AppShell from "@/components/layout/AppShell";
 import { useFinance } from "@/lib/useFinance";
 import { COA, netBal, THB } from "@/lib/balance";
 
-const EXP_SUB_CODES = ["5001","5002","5003","5004","5005","5006","5007","5008","5009","5010","5011","5012","5013","5014","5015"];
+const EXP_SUB_CODES = ["5001","5002","5003","5004","5005","5006","5007","5008","5009","5010","5011","5012","5013","5014","5015","5016","5017"];
 const EXP_OTHER_CODES = ["5000"];
 const EXP_FIXED_CODES = ["5510","5520","5530"];
 

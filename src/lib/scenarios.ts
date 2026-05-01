@@ -40,7 +40,8 @@ export const SCENARIOS: Scenario[] = [
   { id: "exp_edu",      group: "💸 ค่าใช้จ่าย",   label: "📚 การศึกษา / คอร์สออนไลน์ / หนังสือ", dr: "5013", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
   { id: "exp_pet",      group: "💸 ค่าใช้จ่าย",   label: "🐶 สัตว์เลี้ยง",                       dr: "5014", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
   { id: "exp_gift",     group: "💸 ค่าใช้จ่าย",   label: "🎁 ของขวัญ / บริจาค / ทำบุญ",              dr: "5015", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
-  { id: "exp_family",   group: "💸 ค่าใช้จ่าย",   label: "👨‍👩‍👧 ให้ครอบครัว / โอนเงินให้พ่อแม่",   dr: "5016", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่โอนเงิน" },
+  { id: "exp_family",   group: "💸 ค่าใช้จ่าย",   label: "👨‍👩‍👧 โอนเงินให้ครอบครัว / เพื่อน / บุคคลอื่น", dr: "5016", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่โอนเงิน" },
+  { id: "exp_insurance",group: "💸 ค่าใช้จ่าย",   label: "🛡️ ประกันชีวิต / ประกันสุขภาพ",              dr: "5017", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน", hint: "💡 ประกันแบบสะสมทรัพย์มีมูลค่าเวนคืน → อาจบันทึกเป็นสินทรัพย์ (1150 ค่าใช้จ่ายล่วงหน้า) แทนค่าใช้จ่ายก็ได้" },
   { id: "expense",      group: "💸 ค่าใช้จ่าย",   label: "💸 ค่าใช้จ่ายอื่นๆ",                       dr: "5000", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
   { id: "interest",  group: "💸 ค่าใช้จ่าย",   label: "ดอกเบี้ยจ่าย (บัตร/สินเชื่อ)", dr: "5510",cr: "PM",   pmRole: "liab_cr", pmLabel: "หนี้ที่เพิ่มดอกเบี้ย", hint: "เลือกบัตรเครดิต / BNPL / สินเชื่อที่มีดอกเบี้ยเพิ่ม" },
   { id: "fee",       group: "💸 ค่าใช้จ่าย",   label: "ค่าธรรมเนียมธนาคาร",           dr: "5520",cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีที่ถูกหัก" },
@@ -60,6 +61,7 @@ export const SCENARIOS: Scenario[] = [
   { id: "buy_crypto",group: "🏠 ซื้อสินทรัพย์", label: "ซื้อคริปโต",                   dr: "1220",cr: "PM",   pmRole: "pay",     pmLabel: "ช่องทางที่จ่าย", isAsset: true },
   // เบิกเงินสด / รับวงเงินสินเชื่อ
   { id: "cash_adv_cc",   group: "🏦 เบิกเงิน / รับสินเชื่อ", label: "💸 เบิกเงินสดจากบัตรเครดิต",          dr: "PM", cr: "PM", pmRole: "pay", hint: "DR บัญชีรับเงิน, CR บัตรเครดิตที่เพิ่มหนี้" },
+  { id: "cash_adv_bnpl", group: "🏦 เบิกเงิน / รับสินเชื่อ", label: "🛒 เบิกเงินสดจากสินเชื่อ BNPL",        dr: "PM", cr: "PM", pmRole: "pay", hint: "DR บัญชีรับเงิน, CR บัญชี BNPL ที่เพิ่มหนี้" },
   { id: "cash_adv_loan", group: "🏦 เบิกเงิน / รับสินเชื่อ", label: "🏦 รับเงินกู้ / เบิกสินเชื่อ (วงเงินใหม่)", dr: "PM", cr: "PM", pmRole: "pay", hint: "DR บัญชีรับเงิน, CR สินเชื่อที่เพิ่มยอดหนี้" },
   // Opening Balance
   { id: "ob_bank",   group: "📂 Opening Balance", label: "ยอดเงินฝากธนาคารเริ่มต้น",           dr: "1120",cr: "3100", pmRole: "none" },
