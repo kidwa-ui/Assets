@@ -129,11 +129,9 @@ export default function UpcomingPage() {
                 {principal > 0 && (
                   <div className="flex rounded-lg overflow-hidden text-xs" style={{ border: "0.5px solid #16243a" }}>
                     <div className="flex-1 px-3 py-1.5" style={{ background: "#0a1628" }}>
-                      <span className="inline-block px-1.5 py-0.5 rounded font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>{liab}</span>
                       <span style={{ color: "#93c5fd" }}>{liabName}</span>
                     </div>
                     <div className="flex-1 px-3 py-1.5" style={{ background: "#160a0a" }}>
-                      <span className="inline-block px-1.5 py-0.5 rounded font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>1120</span>
                       <span style={{ color: "#fca5a5" }}>เงินฝาก</span>
                     </div>
                     <div className="px-3 py-1.5 flex items-center" style={{ background: "#0a160a", color: "#4ade80", fontWeight: 500 }}>{THB(principal)}</div>
@@ -142,11 +140,9 @@ export default function UpcomingPage() {
                 {interest > 0 && (
                   <div className="flex rounded-lg overflow-hidden text-xs" style={{ border: "0.5px solid #16243a" }}>
                     <div className="flex-1 px-3 py-1.5" style={{ background: "#0a1628" }}>
-                      <span className="inline-block px-1.5 py-0.5 rounded font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>5510</span>
                       <span style={{ color: "#93c5fd" }}>ดอกเบี้ยจ่าย</span>
                     </div>
                     <div className="flex-1 px-3 py-1.5" style={{ background: "#160a0a" }}>
-                      <span className="inline-block px-1.5 py-0.5 rounded font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>1120</span>
                       <span style={{ color: "#fca5a5" }}>เงินฝาก</span>
                     </div>
                     <div className="px-3 py-1.5 flex items-center" style={{ background: "#0a160a", color: "#4ade80", fontWeight: 500 }}>{THB(interest)}</div>
