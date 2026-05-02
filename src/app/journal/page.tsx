@@ -607,12 +607,12 @@ export default function JournalPage() {
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input type="checkbox" checked={insIsAsset} onChange={e => setInsIsAsset(e.target.checked)} className="accent-blue-500 w-4 h-4" />
                 <span className="text-sm font-medium" style={{ color: insIsAsset ? "#86efac" : "#93c5fd" }}>
-                  ประกันแบบสะสมทรัพย์ — บันทึกเป็นสินทรัพย์ (1150 ค่าใช้จ่ายล่วงหน้า)
+                  ประกันแบบสะสมทรัพย์ — บันทึกเป็นค่าใช้จ่ายล่วงหน้า (สินทรัพย์)
                 </span>
               </label>
               {insIsAsset && (
                 <div className="mt-2 text-xs px-2 py-1.5 rounded" style={{ background: "#0a1628", color: "#86efac", borderLeft: "2px solid #22c55e" }}>
-                  DR 1150 ค่าใช้จ่ายล่วงหน้า (สินทรัพย์) แทน DR 5017 ประกันชีวิต
+                  จะบันทึกเป็นสินทรัพย์ (ค่าใช้จ่ายล่วงหน้า) แทนค่าใช้จ่าย
                 </div>
               )}
             </div>
@@ -621,8 +621,8 @@ export default function JournalPage() {
           {/* Preview: ob_bank */}
           {isObBank && bankName.trim() && parseFloat(form.amount) > 0 && (
             <PreviewRow
-              dr={<><span className="font-bold text-xs mr-1" style={{ color: "#60a5fa" }}>11xx</span><span className="text-xs" style={{ color: "#93c5fd" }}>{bankName} ({BANK_TYPES[bankType]})</span></>}
-              cr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>3100</span><span className="text-xs" style={{ color: "#fca5a5" }}>Opening Equity</span></>}
+              dr={<span className="text-xs" style={{ color: "#93c5fd" }}>{bankName} ({BANK_TYPES[bankType]})</span>}
+              cr={<span className="text-xs" style={{ color: "#fca5a5" }}>Opening Equity</span>}
               amt={parseFloat(form.amount || "0")}
             />
           )}
@@ -630,8 +630,8 @@ export default function JournalPage() {
           {/* Preview: ob_cc / ob_bnpl */}
           {isCardSetup && cardName.trim() && parseFloat(form.amount) > 0 && (
             <PreviewRow
-              dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>3100</span><span className="text-xs" style={{ color: "#fca5a5" }}>Opening Equity</span></>}
-              cr={<><span className="font-bold text-xs mr-1" style={{ color: "#f87171" }}>21xx</span><span className="text-xs" style={{ color: "#fca5a5" }}>{cardType === "bnpl" ? "🛒" : "💳"} {cardName}</span></>}
+              dr={<span className="text-xs" style={{ color: "#fca5a5" }}>Opening Equity</span>}
+              cr={<span className="text-xs" style={{ color: "#fca5a5" }}>{cardType === "bnpl" ? "🛒" : "💳"} {cardName}</span>}
               amt={parseFloat(form.amount || "0")}
             />
           )}
@@ -639,8 +639,8 @@ export default function JournalPage() {
           {/* Preview: ob_liab */}
           {isLiabSetup && loanName.trim() && parseFloat(form.amount) > 0 && (
             <PreviewRow
-              dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>3100</span><span className="text-xs" style={{ color: "#fca5a5" }}>Opening Equity</span></>}
-              cr={<><span className="font-bold text-xs mr-1" style={{ color: "#f87171" }}>22xx</span><span className="text-xs" style={{ color: "#fca5a5" }}>{loanName}</span></>}
+              dr={<span className="text-xs" style={{ color: "#fca5a5" }}>Opening Equity</span>}
+              cr={<span className="text-xs" style={{ color: "#fca5a5" }}>{loanName}</span>}
               amt={parseFloat(form.amount || "0")}
             />
           )}
@@ -648,8 +648,8 @@ export default function JournalPage() {
           {/* Preview: transfer_bank */}
           {isTransfer && transferTo && transferFrom && parseFloat(form.amount) > 0 && (
             <PreviewRow
-              dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>{transferTo.acct}</span><span className="text-xs" style={{ color: "#93c5fd" }}>{transferTo.name}</span></>}
-              cr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>{transferFrom.acct}</span><span className="text-xs" style={{ color: "#fca5a5" }}>{transferFrom.name}</span></>}
+              dr={<span className="text-xs" style={{ color: "#93c5fd" }}>{transferTo.name}</span>}
+              cr={<span className="text-xs" style={{ color: "#fca5a5" }}>{transferFrom.name}</span>}
               amt={parseFloat(form.amount || "0")}
             />
           )}
@@ -657,8 +657,8 @@ export default function JournalPage() {
           {/* Preview: pay_cc / pay_bnpl */}
           {isDualPay && dualPayCard && dualPayBank && parseFloat(form.amount) > 0 && (
             <PreviewRow
-              dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>{dualPayCard.account_code}</span><span className="text-xs" style={{ color: "#93c5fd" }}>{dualPayCard.name}</span></>}
-              cr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>{dualPayBank.acct}</span><span className="text-xs" style={{ color: "#fca5a5" }}>{dualPayBank.name}</span></>}
+              dr={<span className="text-xs" style={{ color: "#93c5fd" }}>{dualPayCard.name}</span>}
+              cr={<span className="text-xs" style={{ color: "#fca5a5" }}>{dualPayBank.name}</span>}
               amt={parseFloat(form.amount || "0")}
             />
           )}
@@ -666,8 +666,8 @@ export default function JournalPage() {
           {/* Preview: pay_loan/pay_home/pay_car with individual loan */}
           {isLiabPay && selectedPayLoan && liabPayBank && parseFloat(form.amount) > 0 && (
             <PreviewRow
-              dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>{selectedPayLoan.account_code}</span><span className="text-xs" style={{ color: "#93c5fd" }}>{selectedPayLoan.name}</span></>}
-              cr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>{liabPayBank.acct}</span><span className="text-xs" style={{ color: "#fca5a5" }}>{liabPayBank.name}</span></>}
+              dr={<span className="text-xs" style={{ color: "#93c5fd" }}>{selectedPayLoan.name}</span>}
+              cr={<span className="text-xs" style={{ color: "#fca5a5" }}>{liabPayBank.name}</span>}
               amt={parseFloat(form.amount || "0")}
             />
           )}
@@ -675,8 +675,8 @@ export default function JournalPage() {
           {/* Preview: cash_adv_cc */}
           {isCashAdvCC && advCCCard && advCCBank && parseFloat(form.amount) > 0 && (
             <PreviewRow
-              dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>{advCCBank.acct}</span><span className="text-xs" style={{ color: "#93c5fd" }}>{advCCBank.name}</span></>}
-              cr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>{advCCCard.account_code}</span><span className="text-xs" style={{ color: "#fca5a5" }}>💳 {advCCCard.name}</span></>}
+              dr={<span className="text-xs" style={{ color: "#93c5fd" }}>{advCCBank.name}</span>}
+              cr={<span className="text-xs" style={{ color: "#fca5a5" }}>💳 {advCCCard.name}</span>}
               amt={parseFloat(form.amount || "0")}
             />
           )}
@@ -684,8 +684,8 @@ export default function JournalPage() {
           {/* Preview: cash_adv_bnpl */}
           {isCashAdvBNPL && advBNPLCard && advBNPLBank && parseFloat(form.amount) > 0 && (
             <PreviewRow
-              dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>{advBNPLBank.acct}</span><span className="text-xs" style={{ color: "#93c5fd" }}>{advBNPLBank.name}</span></>}
-              cr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>{advBNPLCard.account_code}</span><span className="text-xs" style={{ color: "#fca5a5" }}>🛒 {advBNPLCard.name}</span></>}
+              dr={<span className="text-xs" style={{ color: "#93c5fd" }}>{advBNPLBank.name}</span>}
+              cr={<span className="text-xs" style={{ color: "#fca5a5" }}>🛒 {advBNPLCard.name}</span>}
               amt={parseFloat(form.amount || "0")}
             />
           )}
@@ -693,8 +693,8 @@ export default function JournalPage() {
           {/* Preview: cash_adv_loan */}
           {isCashAdvLoan && advLoanItem && advLoanBank && parseFloat(form.amount) > 0 && (
             <PreviewRow
-              dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>{advLoanBank.acct}</span><span className="text-xs" style={{ color: "#93c5fd" }}>{advLoanBank.name}</span></>}
-              cr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>{advLoanItem.account_code}</span><span className="text-xs" style={{ color: "#fca5a5" }}>{advLoanItem.name}</span></>}
+              dr={<span className="text-xs" style={{ color: "#93c5fd" }}>{advLoanBank.name}</span>}
+              cr={<span className="text-xs" style={{ color: "#fca5a5" }}>{advLoanItem.name}</span>}
               amt={parseFloat(form.amount || "0")}
             />
           )}
@@ -702,8 +702,8 @@ export default function JournalPage() {
           {/* Preview: normal entries */}
           {!isObBank && !isCardSetup && !isDualPay && !isTransfer && !isLiabSetup && !isCashAdvCC && !isCashAdvBNPL && !isCashAdvLoan && !(isLiabPay && selectedPayLoan) && entry && parseFloat(form.amount) > 0 && (
             <PreviewRow
-              dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>{form.scenId === "exp_insurance" && insIsAsset ? "1150" : entry.dr}</span><span className="text-xs" style={{ color: "#93c5fd" }}>{form.scenId === "exp_insurance" && insIsAsset ? "ค่าใช้จ่ายล่วงหน้า (ประกันสะสมทรัพย์)" : entry.drName}</span></>}
-              cr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>{entry.cr}</span><span className="text-xs" style={{ color: "#fca5a5" }}>{entry.crName}</span></>}
+              dr={<span className="text-xs" style={{ color: "#93c5fd" }}>{form.scenId === "exp_insurance" && insIsAsset ? "ค่าใช้จ่ายล่วงหน้า (ประกันสะสมทรัพย์)" : entry.drName}</span>}
+              cr={<span className="text-xs" style={{ color: "#fca5a5" }}>{entry.crName}</span>}
               amt={parseFloat(form.amount || "0")}
             />
           )}
@@ -741,11 +741,9 @@ export default function JournalPage() {
                       <span style={{ color: "#cdd5e0" }}>{t.description}</span>
                     </td>
                     <td className="px-3 py-2 text-xs">
-                      <span className="inline-block px-1.5 py-0.5 rounded font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa", fontSize: 10 }}>{t.dr_account}</span>
                       <span style={{ color: "#93c5fd" }}>{t.dr_name}</span>
                     </td>
                     <td className="px-3 py-2 text-xs">
-                      <span className="inline-block px-1.5 py-0.5 rounded font-bold mr-1" style={{ background: "#3f1515", color: "#f87171", fontSize: 10 }}>{t.cr_account}</span>
                       <span style={{ color: "#fca5a5" }}>{t.cr_name}</span>
                     </td>
                     <td className="px-3 py-2 text-xs font-medium text-right whitespace-nowrap" style={{ color: "#e2e8f0" }}>{fmt(t.amount)}</td>
