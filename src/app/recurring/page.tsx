@@ -1,13 +1,14 @@
 "use client";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { useFinance } from "@/lib/useFinance";
-import { COA, netBal, THB, fmt } from "@/lib/balance";
+import { COA, type Account, netBal, THB, fmt } from "@/lib/balance";
 
 export default function RecurringPage() {
   const { schedules, ccCards, userBanks, userLiabs, summary, loading, addSchedule, deleteSchedule, confirmSchedInterest } = useFinance();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", liabId: "", bankId: "", rate: "", total: "", defInt: "", day: "", next: "" });
+  const [eomSkipWeekend, setEomSkipWeekend] = useState(false);
   const [confirmInts, setConfirmInts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
@@ -52,15 +53,27 @@ export default function RecurringPage() {
     await addSchedule({
       name: form.name, liability_id: form.liabId, bank_id: form.bankId,
       interest_rate: parseFloat(form.rate) || 0, default_total: parseFloat(form.total),
-      confirmed_interest: null, day_of_month: parseInt(form.day), next_date: form.next, is_active: true,
+      confirmed_interest: null, day_of_month: form.day === "eom" ? (eomSkipWeekend ? -1 : 0) : parseInt(form.day), next_date: form.next, is_active: true,
     });
     setForm({ name: "", liabId: "", bankId: "kbank", rate: "", total: "", defInt: "", day: "", next: "" });
+    setEomSkipWeekend(false);
     setErr(""); setOpen(false); setSaving(false);
   }
 
   async function handleConfirmInt(schedId: string) {
     const val = parseFloat(confirmInts[schedId] || "0");
     await confirmSchedInterest(schedId, val);
+  }
+
+  const extraCOA = useMemo<Record<string, Account>>(() => ({
+    ...Object.fromEntries(ccCards.map(c => [c.account_code, { name: c.name, type: "liability" as const, normal: "credit" as const, subtype: "current" as const }])),
+    ...Object.fromEntries(userLiabs.map(l => [l.account_code, { name: l.name, type: "liability" as const, normal: "credit" as const, subtype: "noncurrent" as const }])),
+  }), [ccCards, userLiabs]);
+
+  function formatDayLabel(d: number) {
+    if (d === 0)  return "สิ้นเดือน";
+    if (d === -1) return "สิ้นเดือน (ปรับวันศุกร์)";
+    return `วันที่ ${d}`;
   }
 
   if (loading || !summary) return <AppShell><div className="text-sm" style={{ color: "#455672" }}>กำลังโหลด...</div></AppShell>;
@@ -102,7 +115,17 @@ export default function RecurringPage() {
             </div>
             <div>
               <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>วันที่ผ่อนทุกเดือน</label>
-              <input type="number" value={form.day} onChange={e => set("day", e.target.value)} min="1" max="31" placeholder="เช่น 28" />
+              <select value={form.day} onChange={e => { set("day", e.target.value); if (e.target.value !== "eom") setEomSkipWeekend(false); }}>
+                <option value="">— เลือก —</option>
+                {Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}
+                <option value="eom">สิ้นเดือน</option>
+              </select>
+              {form.day === "eom" && (
+                <label className="flex items-center gap-1.5 mt-1.5 cursor-pointer select-none">
+                  <input type="checkbox" checked={eomSkipWeekend} onChange={e => setEomSkipWeekend(e.target.checked)} className="accent-blue-500" />
+                  <span className="text-xs" style={{ color: "#93c5fd" }}>ถ้าตรงเสาร์-อาทิตย์ ให้ย้ายเป็นวันศุกร์</span>
+                </label>
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>บัญชีธนาคารที่ตัดจ่าย</label>
@@ -132,7 +155,7 @@ export default function RecurringPage() {
 
       {schedules.map(s => {
         const acct = resolveLibAcct(s.liability_id);
-        const bal = netBal(summary.balances, acct);
+        const bal = netBal(summary.balances, acct, extraCOA);
         const estInt = s.interest_rate > 0 ? Math.round(bal * s.interest_rate / 100 / 12) : 0;
         const ciVal = confirmInts[s.id] ?? (s.confirmed_interest !== null ? String(s.confirmed_interest) : String(estInt));
 
@@ -141,7 +164,7 @@ export default function RecurringPage() {
             <div className="flex justify-between items-start mb-3">
               <div>
                 <div className="font-medium text-sm text-white">{s.name}</div>
-                <div className="text-xs mt-0.5" style={{ color: "#455672" }}>{resolveLibName(s.liability_id)} · วันที่ {s.day_of_month} ทุกเดือน</div>
+                <div className="text-xs mt-0.5" style={{ color: "#455672" }}>{resolveLibName(s.liability_id)} · {formatDayLabel(s.day_of_month)} ทุกเดือน</div>
               </div>
               <div className="flex items-center gap-3">
                 <div className="text-right">
