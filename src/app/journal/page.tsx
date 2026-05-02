@@ -107,6 +107,8 @@ export default function JournalPage() {
   const [loanType, setLoanType] = useState("personal");
   // ob_asset sub-label
   const [subLabel, setSubLabel] = useState("");
+  // exp_insurance savings-type toggle
+  const [insIsAsset, setInsIsAsset] = useState(false);
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -148,14 +150,14 @@ export default function JournalPage() {
       date: s?.group === "📂 Opening Balance" && userCreatedAt ? userCreatedAt : p.date,
     }));
     setBankName(""); setBankType("savings");
-    setCardName(""); setPayCardId(""); setPayLoanId(""); setSubLabel("");
+    setCardName(""); setPayCardId(""); setPayLoanId(""); setSubLabel(""); setInsIsAsset(false);
     setTransferToId(""); setLoanName(""); setLoanType("personal");
   }
 
   function resetForm() {
     setForm({ date: "", desc: "", scenId: "", pmId: "", amount: "" });
     setBankName(""); setBankType("savings");
-    setCardName(""); setPayCardId(""); setPayLoanId(""); setSubLabel(""); setErr("");
+    setCardName(""); setPayCardId(""); setPayLoanId(""); setSubLabel(""); setInsIsAsset(false); setErr("");
     setTransferToId(""); setLoanName(""); setLoanType("personal");
   }
 
@@ -297,7 +299,11 @@ export default function JournalPage() {
     const drNameFinal = subLabel && scen?.id === "ob_asset" ? `${entry.drName} (${subLabel})` : entry.drName;
     const crNameFinal = subLabel && scen?.id === "ob_liab"  ? `${entry.crName} (${subLabel})` : entry.crName;
 
-    const { error } = await addTransaction({ date: form.date, description: descFinal, dr_account: entry.dr, cr_account: entry.cr, dr_name: drNameFinal, cr_name: crNameFinal, amount: amt, is_system: false });
+    const isInsAsset = form.scenId === "exp_insurance" && insIsAsset;
+    const drAcct  = isInsAsset ? "1150" : entry.dr;
+    const drName  = isInsAsset ? "ค่าใช้จ่ายล่วงหน้า (ประกันสะสมทรัพย์)" : drNameFinal;
+
+    const { error } = await addTransaction({ date: form.date, description: descFinal, dr_account: drAcct, cr_account: entry.cr, dr_name: drName, cr_name: crNameFinal, amount: amt, is_system: false });
     if (error) setErr(error.message);
     else { resetForm(); setOpen(false); }
     setSaving(false);
@@ -595,6 +601,23 @@ export default function JournalPage() {
             </div>
           )}
 
+          {/* Insurance savings-type toggle */}
+          {scen?.id === "exp_insurance" && (
+            <div className="mb-3 rounded-lg p-3" style={{ background: insIsAsset ? "#052e1644" : "#0f1828", border: `0.5px solid ${insIsAsset ? "#22c55e44" : "#16243a"}` }}>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" checked={insIsAsset} onChange={e => setInsIsAsset(e.target.checked)} className="accent-blue-500 w-4 h-4" />
+                <span className="text-sm font-medium" style={{ color: insIsAsset ? "#86efac" : "#93c5fd" }}>
+                  ประกันแบบสะสมทรัพย์ — บันทึกเป็นสินทรัพย์ (1150 ค่าใช้จ่ายล่วงหน้า)
+                </span>
+              </label>
+              {insIsAsset && (
+                <div className="mt-2 text-xs px-2 py-1.5 rounded" style={{ background: "#0a1628", color: "#86efac", borderLeft: "2px solid #22c55e" }}>
+                  DR 1150 ค่าใช้จ่ายล่วงหน้า (สินทรัพย์) แทน DR 5017 ประกันชีวิต
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Preview: ob_bank */}
           {isObBank && bankName.trim() && parseFloat(form.amount) > 0 && (
             <PreviewRow
@@ -679,7 +702,7 @@ export default function JournalPage() {
           {/* Preview: normal entries */}
           {!isObBank && !isCardSetup && !isDualPay && !isTransfer && !isLiabSetup && !isCashAdvCC && !isCashAdvBNPL && !isCashAdvLoan && !(isLiabPay && selectedPayLoan) && entry && parseFloat(form.amount) > 0 && (
             <PreviewRow
-              dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>{entry.dr}</span><span className="text-xs" style={{ color: "#93c5fd" }}>{entry.drName}</span></>}
+              dr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#1e3a5f", color: "#60a5fa" }}>{form.scenId === "exp_insurance" && insIsAsset ? "1150" : entry.dr}</span><span className="text-xs" style={{ color: "#93c5fd" }}>{form.scenId === "exp_insurance" && insIsAsset ? "ค่าใช้จ่ายล่วงหน้า (ประกันสะสมทรัพย์)" : entry.drName}</span></>}
               cr={<><span className="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1" style={{ background: "#3f1515", color: "#f87171" }}>{entry.cr}</span><span className="text-xs" style={{ color: "#fca5a5" }}>{entry.crName}</span></>}
               amt={parseFloat(form.amount || "0")}
             />

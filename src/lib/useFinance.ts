@@ -63,6 +63,23 @@ export interface UserLiab {
   account_code: string;
 }
 
+function calcNextDate(baseDate: string, dayOfMonth: number): string {
+  const [by, bm] = baseDate.split("-").map(Number);
+  const ty = bm === 12 ? by + 1 : by;
+  const tm = bm === 12 ? 1 : bm + 1; // 1-indexed target month
+  if (dayOfMonth <= 0) {
+    // Last day of target month: day 0 of month tm+1 (still 1-indexed so use Date(ty, tm, 0))
+    const d = new Date(ty, tm, 0); // day=0 gives last day of month tm
+    if (dayOfMonth === -1) {
+      const dow = d.getDay();
+      if (dow === 6) d.setDate(d.getDate() - 1); // Saturday → Friday
+      if (dow === 0) d.setDate(d.getDate() - 2); // Sunday → Friday
+    }
+    return d.toISOString().slice(0, 10);
+  }
+  return new Date(ty, tm - 1, dayOfMonth).toISOString().slice(0, 10);
+}
+
 // Account code ranges for individual loans
 const LIAB_RANGES: Record<string, [number, number]> = {
   home:     [2211, 2219],
@@ -267,10 +284,7 @@ export function useFinance() {
 
     await supabase.from("queue_items").update({ status: "confirmed", paid_date: params.date, paid_total: params.total, paid_principal: params.principal, paid_interest: params.interest }).eq("id", queueId);
 
-    const nd = new Date(params.date);
-    nd.setMonth(nd.getMonth() + 1);
-    nd.setDate(params.dayOfMonth);
-    const nextDate = nd.toISOString().slice(0, 10);
+    const nextDate = calcNextDate(params.date, params.dayOfMonth);
     await supabase.from("schedules").update({ confirmed_interest: null, next_date: nextDate }).eq("id", params.schedId);
 
     const updatedSched = schedules.find(s => s.id === params.schedId);
@@ -284,10 +298,7 @@ export function useFinance() {
 
   const skipQueueItem = async (queueId: string, dueDate: string, schedId: string, dayOfMonth: number) => {
     await supabase.from("queue_items").update({ status: "skipped", paid_total: 0 }).eq("id", queueId);
-    const nd = new Date(dueDate);
-    nd.setMonth(nd.getMonth() + 1);
-    nd.setDate(dayOfMonth);
-    const nextDate = nd.toISOString().slice(0, 10);
+    const nextDate = calcNextDate(dueDate, dayOfMonth);
     await supabase.from("schedules").update({ next_date: nextDate }).eq("id", schedId);
     const updatedSched = schedules.find(s => s.id === schedId);
     if (updatedSched && userId) {
