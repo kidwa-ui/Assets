@@ -109,6 +109,9 @@ export default function JournalPage() {
   const [subLabel, setSubLabel] = useState("");
   // exp_insurance savings-type toggle
   const [insIsAsset, setInsIsAsset] = useState(false);
+  // canBeAsset expense toggle (fashion, entertain, edu, home)
+  const [expIsAsset, setExpIsAsset] = useState(false);
+  const [expAssetAcct, setExpAssetAcct] = useState("1350");
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -150,14 +153,14 @@ export default function JournalPage() {
       date: s?.group === "📂 Opening Balance" && userCreatedAt ? userCreatedAt : p.date,
     }));
     setBankName(""); setBankType("savings");
-    setCardName(""); setPayCardId(""); setPayLoanId(""); setSubLabel(""); setInsIsAsset(false);
+    setCardName(""); setPayCardId(""); setPayLoanId(""); setSubLabel(""); setInsIsAsset(false); setExpIsAsset(false); setExpAssetAcct("1350");
     setTransferToId(""); setLoanName(""); setLoanType("personal");
   }
 
   function resetForm() {
     setForm({ date: "", desc: "", scenId: "", pmId: "", amount: "" });
     setBankName(""); setBankType("savings");
-    setCardName(""); setPayCardId(""); setPayLoanId(""); setSubLabel(""); setInsIsAsset(false); setErr("");
+    setCardName(""); setPayCardId(""); setPayLoanId(""); setSubLabel(""); setInsIsAsset(false); setExpIsAsset(false); setExpAssetAcct("1350"); setErr("");
     setTransferToId(""); setLoanName(""); setLoanType("personal");
   }
 
@@ -300,8 +303,9 @@ export default function JournalPage() {
     const crNameFinal = subLabel && scen?.id === "ob_liab"  ? `${entry.crName} (${subLabel})` : entry.crName;
 
     const isInsAsset = form.scenId === "exp_insurance" && insIsAsset;
-    const drAcct  = isInsAsset ? "1150" : entry.dr;
-    const drName  = isInsAsset ? "ค่าใช้จ่ายล่วงหน้า (ประกันสะสมทรัพย์)" : drNameFinal;
+    const isExpAsset = scen?.canBeAsset && expIsAsset;
+    const drAcct  = isInsAsset ? "1150" : isExpAsset ? expAssetAcct : entry.dr;
+    const drName  = isInsAsset ? "ค่าใช้จ่ายล่วงหน้า (ประกันสะสมทรัพย์)" : isExpAsset ? (COA[expAssetAcct]?.name ?? expAssetAcct) : drNameFinal;
 
     const { error } = await addTransaction({ date: form.date, description: descFinal, dr_account: drAcct, cr_account: entry.cr, dr_name: drName, cr_name: crNameFinal, amount: amt, is_system: false });
     if (error) setErr(error.message);
@@ -618,6 +622,27 @@ export default function JournalPage() {
             </div>
           )}
 
+          {/* canBeAsset toggle */}
+          {scen?.canBeAsset && (
+            <div className="mb-3 rounded-lg p-3" style={{ background: expIsAsset ? "#1a2e1a" : "#0f1828", border: `0.5px solid ${expIsAsset ? "#22c55e44" : "#16243a"}` }}>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" checked={expIsAsset} onChange={e => setExpIsAsset(e.target.checked)} className="accent-blue-500 w-4 h-4" />
+                <span className="text-sm font-medium" style={{ color: expIsAsset ? "#86efac" : "#93c5fd" }}>
+                  บันทึกเป็นสินทรัพย์ (ของชิ้นนี้มีมูลค่า / ใช้งานได้นาน)
+                </span>
+              </label>
+              {expIsAsset && (
+                <div className="mt-2">
+                  <select value={expAssetAcct} onChange={e => setExpAssetAcct(e.target.value)}>
+                    <option value="1350">เครื่องใช้ทั่วไป / เสื้อผ้า / ของใช้</option>
+                    <option value="1340">อุปกรณ์ IT / อิเล็กทรอนิกส์</option>
+                    <option value="1360">ของสะสม / งานศิลป์</option>
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Preview: ob_bank */}
           {isObBank && bankName.trim() && parseFloat(form.amount) > 0 && (
             <PreviewRow
@@ -702,7 +727,13 @@ export default function JournalPage() {
           {/* Preview: normal entries */}
           {!isObBank && !isCardSetup && !isDualPay && !isTransfer && !isLiabSetup && !isCashAdvCC && !isCashAdvBNPL && !isCashAdvLoan && !(isLiabPay && selectedPayLoan) && entry && parseFloat(form.amount) > 0 && (
             <PreviewRow
-              dr={<span className="text-xs" style={{ color: "#93c5fd" }}>{form.scenId === "exp_insurance" && insIsAsset ? "ค่าใช้จ่ายล่วงหน้า (ประกันสะสมทรัพย์)" : entry.drName}</span>}
+              dr={<span className="text-xs" style={{ color: "#93c5fd" }}>
+                {form.scenId === "exp_insurance" && insIsAsset
+                  ? "ค่าใช้จ่ายล่วงหน้า (ประกันสะสมทรัพย์)"
+                  : scen?.canBeAsset && expIsAsset
+                    ? (COA[expAssetAcct]?.name ?? expAssetAcct)
+                    : entry.drName}
+              </span>}
               cr={<span className="text-xs" style={{ color: "#fca5a5" }}>{entry.crName}</span>}
               amt={parseFloat(form.amount || "0")}
             />

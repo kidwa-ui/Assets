@@ -8,6 +8,7 @@ export interface Scenario {
   pmLabel?: string;
   hint?: string;
   isAsset?: boolean;
+  canBeAsset?: boolean;
 }
 
 export const SCENARIOS: Scenario[] = [
@@ -32,18 +33,19 @@ export const SCENARIOS: Scenario[] = [
   { id: "exp_carcare",  group: "💸 ค่าใช้จ่าย",   label: "🔧 ค่าซ่อมรถ&อะไหล่ / บำรุงรักษา / ประกันรถ / ภาษีรถ",    dr: "5019", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
   { id: "exp_fitness",  group: "💸 ค่าใช้จ่าย",   label: "🏋️ การออกกำลังกาย / สปา / วิตามิน-อาหารเสริม / ดูแลตัวเอง", dr: "5005", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
   { id: "exp_health",   group: "💸 ค่าใช้จ่าย",   label: "🏥 ค่าแพทย์ / ยา",                     dr: "5006", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
-  { id: "exp_fashion",  group: "💸 ค่าใช้จ่าย",   label: "👕 เสื้อผ้า / แฟชั่น / รองเท้า",      dr: "5007", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
+  { id: "exp_fashion",  group: "💸 ค่าใช้จ่าย",   label: "👕 เสื้อผ้า / แฟชั่น / รองเท้า",      dr: "5007", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน", canBeAsset: true },
   { id: "exp_utility",  group: "💸 ค่าใช้จ่าย",   label: "💡 ค่าสาธารณูปโภค (ไฟ / น้ำ / ค่าโทรศัพท์ / อินเตอร์เน็ต)", dr: "5009", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
-  { id: "exp_entertain",group: "💸 ค่าใช้จ่าย",   label: "🎬 บันเทิง / สตรีมมิ่ง / ภาพยนตร์",   dr: "5010", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
+  { id: "exp_entertain",group: "💸 ค่าใช้จ่าย",   label: "🎬 บันเทิง / ภาพยนตร์ / เกม / Subscribe", dr: "5010", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน", canBeAsset: true },
   { id: "exp_travel",   group: "💸 ค่าใช้จ่าย",   label: "✈️ ท่องเที่ยว / ที่พัก / โรงแรม",     dr: "5011", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
-  { id: "exp_home",     group: "💸 ค่าใช้จ่าย",   label: "🏠 ของใช้ในบ้าน / ซ่อมแซม / เฟอร์นิเจอร์", dr: "5012", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
-  { id: "exp_edu",      group: "💸 ค่าใช้จ่าย",   label: "📚 การศึกษา / คอร์สออนไลน์ / หนังสือ", dr: "5013", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
+  { id: "exp_home",     group: "💸 ค่าใช้จ่าย",   label: "🏠 ของใช้ในบ้าน / ซ่อมแซม / เฟอร์นิเจอร์", dr: "5012", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน", canBeAsset: true },
+  { id: "exp_edu",      group: "💸 ค่าใช้จ่าย",   label: "📚 การศึกษา / คอร์สออนไลน์ / หนังสือ", dr: "5013", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน", canBeAsset: true },
   { id: "exp_child",    group: "💸 ค่าใช้จ่าย",   label: "👶 ค่าใช้จ่ายลูก / ค่าเรียนพิเศษ",    dr: "5020", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
   { id: "exp_pet",      group: "💸 ค่าใช้จ่าย",   label: "🐶 สัตว์เลี้ยง",                       dr: "5014", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
   { id: "exp_gift",     group: "💸 ค่าใช้จ่าย",   label: "🎁 ของขวัญ / บริจาค / ทำบุญ",              dr: "5015", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
   { id: "exp_rent",     group: "💸 ค่าใช้จ่าย",   label: "🔑 ค่าเช่าบ้าน / หอพัก / ร้านค้า",    dr: "5018", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
   { id: "exp_family",   group: "💸 ค่าใช้จ่าย",   label: "👨‍👩‍👧 โอนเงินให้ครอบครัว / เพื่อน / บุคคลอื่น", dr: "5016", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่โอนเงิน" },
   { id: "exp_insurance",group: "💸 ค่าใช้จ่าย",   label: "🛡️ ประกันชีวิต / ประกันสุขภาพ",              dr: "5017", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน", hint: "💡 ประกันแบบสะสมทรัพย์มีมูลค่าเวนคืน → อาจบันทึกเป็นสินทรัพย์ (1150 ค่าใช้จ่ายล่วงหน้า) แทนค่าใช้จ่ายก็ได้" },
+  { id: "exp_biz",      group: "💸 ค่าใช้จ่าย",   label: "💼 ค่าใช้จ่ายธุรกิจ",                 dr: "5021", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน", hint: "เช่น ค่าโฆษณา ค่าซอฟต์แวร์ ค่าจ้างฟรีแลนซ์ ค่าเดินทางธุรกิจ" },
   { id: "expense",      group: "💸 ค่าใช้จ่าย",   label: "💸 ค่าใช้จ่ายอื่นๆ",                       dr: "5000", cr: "PM", pmRole: "pay", pmLabel: "ช่องทางที่จ่ายเงิน" },
   { id: "interest",  group: "💸 ค่าใช้จ่าย",   label: "ดอกเบี้ยจ่าย (บัตร/สินเชื่อ)", dr: "5510",cr: "PM",   pmRole: "liab_cr", pmLabel: "หนี้ที่เพิ่มดอกเบี้ย", hint: "เลือกบัตรเครดิต / BNPL / สินเชื่อที่มีดอกเบี้ยเพิ่ม" },
   { id: "fee",       group: "💸 ค่าใช้จ่าย",   label: "ค่าธรรมเนียมธนาคาร",           dr: "5520",cr: "PM",   pmRole: "pay",     pmLabel: "บัญชีที่ถูกหัก" },
