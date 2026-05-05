@@ -82,9 +82,13 @@ function calcNextDate(baseDate: string, dayOfMonth: number): string {
 
 // Account code ranges for individual loans
 const LIAB_RANGES: Record<string, [number, number]> = {
-  home:     [2211, 2219],
-  car:      [2221, 2229],
-  personal: [2231, 2259],
+  home:           [2211, 2219],
+  car:            [2221, 2229],
+  personal:       [2231, 2239],
+  welfare_coop:   [2241, 2249],
+  welfare_home:   [2251, 2259],
+  welfare_car:    [2261, 2269],
+  welfare_other:  [2271, 2279],
 };
 
 export function useFinance() {

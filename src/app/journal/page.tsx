@@ -13,11 +13,18 @@ const DUAL_PM_SCENS    = ["pay_cc", "pay_bnpl"];
 const CARD_SETUP_SCENS = ["ob_cc", "ob_bnpl"];
 const TRANSFER_SCENS   = ["transfer_bank"];
 const LIAB_SETUP_SCENS = ["ob_liab"];
-const LIAB_PAY_SCENS   = ["pay_loan", "pay_home", "pay_car"];
-const LIAB_PAY_TYPE: Record<string, string> = { pay_loan: "personal", pay_home: "home", pay_car: "car" };
+const LIAB_PAY_SCENS   = ["pay_loan", "pay_home", "pay_car", "pay_welfare_coop", "pay_welfare_home", "pay_welfare_car", "pay_welfare_other"];
+const LIAB_PAY_TYPE: Record<string, string> = {
+  pay_loan: "personal", pay_home: "home", pay_car: "car",
+  pay_welfare_coop: "welfare_coop", pay_welfare_home: "welfare_home",
+  pay_welfare_car: "welfare_car", pay_welfare_other: "welfare_other",
+};
 const CASH_ADV_CC_SCENS   = ["cash_adv_cc"];
 const CASH_ADV_BNPL_SCENS = ["cash_adv_bnpl"];
 const CASH_ADV_LOAN_SCENS = ["cash_adv_loan"];
+const SALARY_SCENS        = ["salary"];
+
+interface LoanDeductRow { id: string; loanId: string; amount: string }
 
 function getPMPool(
   s: Scenario,
@@ -112,6 +119,13 @@ export default function JournalPage() {
   // canBeAsset expense toggle (fashion, entertain, edu, home)
   const [expIsAsset, setExpIsAsset] = useState(false);
   const [expAssetAcct, setExpAssetAcct] = useState("1350");
+  // salary compound form
+  const [salForm, setSalForm] = useState({
+    base: "", ot: "", allow_fuel: "", allow_phone: "", allow_pos: "", bonus: "",
+    tax: "", ss_emp: "", pvd_emp: "",
+    ss_er: "", pvd_er: "",
+  });
+  const [salLoans, setSalLoans] = useState<LoanDeductRow[]>([]);
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -125,18 +139,43 @@ export default function JournalPage() {
   const isCashAdvCC   = CASH_ADV_CC_SCENS.includes(form.scenId);
   const isCashAdvBNPL = CASH_ADV_BNPL_SCENS.includes(form.scenId);
   const isCashAdvLoan = CASH_ADV_LOAN_SCENS.includes(form.scenId);
+  const isSalary      = SALARY_SCENS.includes(form.scenId);
   const cardType      = form.scenId === "ob_bnpl" || form.scenId === "pay_bnpl" ? "bnpl" : "credit";
   const availablePayCards = ccCards.filter(c => c.card_type === cardType);
   const availablePayLoans = userLiabs.filter(l => l.type === (LIAB_PAY_TYPE[form.scenId] ?? ""));
   const advCreditCards    = ccCards.filter(c => c.card_type === "credit");
   const advBNPLCards      = ccCards.filter(c => c.card_type === "bnpl");
 
-  const pmPool  = scen && !isObBank && !isCardSetup && !isLiabSetup && !isCashAdvCC && !isCashAdvBNPL && !isCashAdvLoan
+  const pmPool  = scen && !isObBank && !isCardSetup && !isLiabSetup && !isCashAdvCC && !isCashAdvBNPL && !isCashAdvLoan && !isSalary
     ? getPMPool(scen, ccCards, userBanks, userLiabs) : [];
-  const entry   = scen && !isObBank && !isCardSetup && !isDualPay && !isTransfer && !isLiabSetup && !isCashAdvCC && !isCashAdvBNPL && !isCashAdvLoan
+  const entry   = scen && !isObBank && !isCardSetup && !isDualPay && !isTransfer && !isLiabSetup && !isCashAdvCC && !isCashAdvBNPL && !isCashAdvLoan && !isSalary
     ? resolveEntry(scen, form.pmId, ccCards, userBanks, userLiabs)
     : null;
-  const needsPM = scen && scen.pmRole !== "none" && !isObBank && !isCardSetup && !isLiabSetup && !isCashAdvCC && !isCashAdvBNPL && !isCashAdvLoan;
+  const needsPM = scen && scen.pmRole !== "none" && !isObBank && !isCardSetup && !isLiabSetup && !isCashAdvCC && !isCashAdvBNPL && !isCashAdvLoan && !isSalary;
+
+  // ── Salary placeholder: dig last salary's components (bank=net, 5030=tax, 1240=SS, 1230=PVD) ──
+  const lastSalary = useMemo(() => {
+    const salTxns = txns.filter(t => t.cr_account === "4100" || t.cr_account === "4150" || t.cr_account === "2310");
+    if (salTxns.length === 0) return null;
+    const lastDate = salTxns[salTxns.length - 1].date;
+    const sameDay = salTxns.filter(t => t.date === lastDate);
+    const by: Record<string, number> = {};
+    sameDay.forEach(t => { by[t.dr_account] = (by[t.dr_account] || 0) + t.amount; });
+    const grossCR = sameDay.filter(t => t.cr_account === "4100").reduce((s, t) => s + t.amount, 0);
+    const er4150  = sameDay.filter(t => t.cr_account === "4150").reduce((s, t) => s + t.amount, 0);
+    const er2310  = sameDay.filter(t => t.cr_account === "2310").reduce((s, t) => s + t.amount, 0);
+    const tax = by["5030"] || 0;
+    // SS-employee = whatever debits 1240 with cr=4100; SS-employer = whatever debits 1240 with cr=4150
+    const ssEmpRow = sameDay.filter(t => t.dr_account === "1240" && t.cr_account === "4100").reduce((s, t) => s + t.amount, 0);
+    const ssErRow  = sameDay.filter(t => t.dr_account === "1240" && t.cr_account === "4150").reduce((s, t) => s + t.amount, 0);
+    const pvdEmpRow = sameDay.filter(t => t.dr_account === "1230" && t.cr_account === "4100").reduce((s, t) => s + t.amount, 0);
+    const pvdErRow  = sameDay.filter(t => t.dr_account === "1230" && t.cr_account === "2310").reduce((s, t) => s + t.amount, 0);
+    return {
+      date: lastDate, gross: grossCR,
+      tax, ss_emp: ssEmpRow, pvd_emp: pvdEmpRow,
+      ss_er: ssErRow || er4150, pvd_er: pvdErRow || er2310,
+    };
+  }, [txns]);
 
   const groups = useMemo(() => {
     const g: Record<string, Scenario[]> = {};
@@ -155,6 +194,8 @@ export default function JournalPage() {
     setBankName(""); setBankType("savings");
     setCardName(""); setPayCardId(""); setPayLoanId(""); setSubLabel(""); setInsIsAsset(false); setExpIsAsset(false); setExpAssetAcct("1350");
     setTransferToId(""); setLoanName(""); setLoanType("personal");
+    setSalForm({ base: "", ot: "", allow_fuel: "", allow_phone: "", allow_pos: "", bonus: "", tax: "", ss_emp: "", pvd_emp: "", ss_er: "", pvd_er: "" });
+    setSalLoans([]);
   }
 
   function resetForm() {
@@ -162,12 +203,15 @@ export default function JournalPage() {
     setBankName(""); setBankType("savings");
     setCardName(""); setPayCardId(""); setPayLoanId(""); setSubLabel(""); setInsIsAsset(false); setExpIsAsset(false); setExpAssetAcct("1350"); setErr("");
     setTransferToId(""); setLoanName(""); setLoanType("personal");
+    setSalForm({ base: "", ot: "", allow_fuel: "", allow_phone: "", allow_pos: "", bonus: "", tax: "", ss_emp: "", pvd_emp: "", ss_er: "", pvd_er: "" });
+    setSalLoans([]);
   }
 
   async function submit() {
-    if (!form.date || !form.amount) { setErr("กรุณากรอกวันที่และจำนวนเงิน"); return; }
-    const amt = parseFloat(form.amount);
-    if (isNaN(amt) || amt < 0) { setErr("จำนวนเงินไม่ถูกต้อง"); return; }
+    if (!form.date) { setErr("กรุณากรอกวันที่"); return; }
+    if (!isSalary && !form.amount) { setErr("กรุณากรอกจำนวนเงิน"); return; }
+    const amt = isSalary ? 0 : parseFloat(form.amount);
+    if (!isSalary && (isNaN(amt) || amt < 0)) { setErr("จำนวนเงินไม่ถูกต้อง"); return; }
     setSaving(true);
 
     // --- ob_bank ---
@@ -292,6 +336,72 @@ export default function JournalPage() {
       setSaving(false); return;
     }
 
+    // --- salary: compound entry (gross + deductions + employer match) ---
+    if (isSalary) {
+      const bank = resolvePM(form.pmId, ccCards, userBanks);
+      if (!bank) { setErr("กรุณาเลือกบัญชีที่รับเงินเดือน"); setSaving(false); return; }
+      const num = (s: string) => { const n = parseFloat(s); return isNaN(n) ? 0 : n; };
+      const base       = num(salForm.base);
+      const ot         = num(salForm.ot);
+      const allow_fuel = num(salForm.allow_fuel);
+      const allow_phone= num(salForm.allow_phone);
+      const allow_pos  = num(salForm.allow_pos);
+      const bonus      = num(salForm.bonus);
+      const tax        = num(salForm.tax);
+      const ss_emp     = num(salForm.ss_emp);
+      const pvd_emp    = num(salForm.pvd_emp);
+      const ss_er      = num(salForm.ss_er);
+      const pvd_er     = num(salForm.pvd_er);
+      const gross      = base + ot + allow_fuel + allow_phone + allow_pos + bonus;
+      if (gross <= 0) { setErr("กรอกเงินเดือน/รายได้รวมต้องมากกว่า 0"); setSaving(false); return; }
+      const loanRows = salLoans
+        .map(r => ({ ...r, amt: num(r.amount) }))
+        .filter(r => r.loanId && r.amt > 0);
+      // resolve loan account info
+      const allLiabPool = [
+        ...userLiabs.map(l => ({ id: "ul:" + l.id, name: l.name, acct: l.account_code })),
+        ...ccCards.map(c => ({ id: "cc:" + c.id, name: `${c.card_type === "bnpl" ? "🛒" : "💳"} ${c.name}`, acct: c.account_code })),
+      ];
+      for (const lr of loanRows) {
+        if (!allLiabPool.find(p => p.id === lr.loanId)) {
+          setErr("รายการหักหนี้สินไม่ถูกต้อง"); setSaving(false); return;
+        }
+      }
+      const totalLoanDeduct = loanRows.reduce((s, r) => s + r.amt, 0);
+      const totalDeduct = tax + ss_emp + pvd_emp + totalLoanDeduct;
+      if (totalDeduct > gross) { setErr("รายการหักรวมมากกว่ารายได้รวม"); setSaving(false); return; }
+      const net = gross - totalDeduct;
+      const ymLabel = form.date ? form.date.slice(0, 7) : "";
+      const baseDesc = form.desc || `เงินเดือน ${ymLabel}`;
+      const post = async (dr: string, drName: string, cr: string, crName: string, amount: number, suffix: string) => {
+        if (amount <= 0) return null;
+        return addTransaction({
+          date: form.date, description: `${baseDesc} — ${suffix}`,
+          dr_account: dr, cr_account: cr, dr_name: drName, cr_name: crName, amount, is_system: false,
+        });
+      };
+      // Employee side — all CR 4100 (gross salary income)
+      const r1 = await post(bank.acct, bank.name, "4100", "เงินเดือน", net, "เงินเข้าบัญชี (net)");
+      if (r1?.error) { setErr(r1.error.message); setSaving(false); return; }
+      const r2 = await post("5030", "ภาษีเงินได้บุคคลธรรมดา", "4100", "เงินเดือน", tax, "ภาษีหัก ณ ที่จ่าย");
+      if (r2?.error) { setErr(r2.error.message); setSaving(false); return; }
+      const r3 = await post("1240", "ประกันสังคม-สะสม", "4100", "เงินเดือน", ss_emp, "ประกันสังคม-ลูกจ้าง");
+      if (r3?.error) { setErr(r3.error.message); setSaving(false); return; }
+      const r4 = await post("1230", "กองทุนสำรองเลี้ยงชีพ (PVD)", "4100", "เงินเดือน", pvd_emp, "PVD-ลูกจ้าง");
+      if (r4?.error) { setErr(r4.error.message); setSaving(false); return; }
+      for (const lr of loanRows) {
+        const loan = allLiabPool.find(p => p.id === lr.loanId)!;
+        const r = await post(loan.acct, loan.name, "4100", "เงินเดือน", lr.amt, `หักชำระ ${loan.name}`);
+        if (r?.error) { setErr(r.error.message); setSaving(false); return; }
+      }
+      // Employer match — separate entries
+      const r5 = await post("1240", "ประกันสังคม-สะสม", "4150", "รายได้สมทบจากนายจ้าง", ss_er, "ประกันสังคม-นายจ้างสมทบ");
+      if (r5?.error) { setErr(r5.error.message); setSaving(false); return; }
+      const r6 = await post("1230", "กองทุนสำรองเลี้ยงชีพ (PVD)", "2310", "รายได้ PVD รอการรับรู้", pvd_er, "PVD-นายจ้างสมทบ");
+      if (r6?.error) { setErr(r6.error.message); setSaving(false); return; }
+      resetForm(); setOpen(false); setSaving(false); return;
+    }
+
     // --- Normal case ---
     if (!form.scenId) { setErr("กรุณาเลือกประเภทรายการ"); setSaving(false); return; }
     if (needsPM && !form.pmId) { setErr("กรุณาเลือก" + (scen?.pmLabel || "ช่องทาง")); setSaving(false); return; }
@@ -326,6 +436,24 @@ export default function JournalPage() {
   const cashAdvPool = (isCashAdvCC || isCashAdvBNPL || isCashAdvLoan)
     ? [{ id: "cash:1110", name: "💵 เงินสด", acct: "1110" }, ...userBanks.map(b => ({ id: "bank:" + b.id, name: `🏦 ${b.name} (${BANK_TYPES[b.type] ?? b.type})`, acct: b.account_code }))]
     : [];
+  const salaryBankPool = isSalary
+    ? [{ id: "cash:1110", name: "💵 เงินสด", acct: "1110" }, ...userBanks.map(b => ({ id: "bank:" + b.id, name: `🏦 ${b.name} (${BANK_TYPES[b.type] ?? b.type})`, acct: b.account_code }))]
+    : [];
+  const salaryLoanPool = isSalary
+    ? [
+        ...userLiabs.map(l => {
+          const emo: Record<string, string> = { home: "🏠", car: "🚗", personal: "💼", welfare_coop: "🤝", welfare_home: "🏡", welfare_car: "🚙", welfare_other: "📋" };
+          return { id: "ul:" + l.id, name: `${emo[l.type] ?? "💼"} ${l.name}`, acct: l.account_code };
+        }),
+        ...ccCards.map(c => ({ id: "cc:" + c.id, name: `${c.card_type === "bnpl" ? "🛒" : "💳"} ${c.name}`, acct: c.account_code })),
+      ]
+    : [];
+  const salNum = (s: string) => { const n = parseFloat(s); return isNaN(n) ? 0 : n; };
+  const salGross = isSalary ? (salNum(salForm.base) + salNum(salForm.ot) + salNum(salForm.allow_fuel) + salNum(salForm.allow_phone) + salNum(salForm.allow_pos) + salNum(salForm.bonus)) : 0;
+  const salDeduct = isSalary ? (salNum(salForm.tax) + salNum(salForm.ss_emp) + salNum(salForm.pvd_emp) + salLoans.reduce((s, r) => s + salNum(r.amount), 0)) : 0;
+  const salNet = salGross - salDeduct;
+  const setSal = (k: keyof typeof salForm, v: string) => setSalForm(p => ({ ...p, [k]: v }));
+  const phStr = (n: number) => n > 0 ? n.toLocaleString("th-TH", { maximumFractionDigits: 2 }) : "";
   const selectedPayLoan = isLiabPay && payLoanId ? userLiabs.find(l => l.id === payLoanId) : null;
   const liabPayBank = isLiabPay && form.pmId ? resolvePM(form.pmId, ccCards, userBanks) : null;
   const transferTo   = isTransfer ? resolvePM(transferToId, ccCards, userBanks) : null;
@@ -366,11 +494,13 @@ export default function JournalPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>จำนวน ฿</label>
-              <input type="number" value={form.amount} onChange={e => set("amount", e.target.value)} placeholder="0.00" min="0" />
-            </div>
+          <div className={`grid ${isSalary ? "grid-cols-1" : "grid-cols-2"} gap-3 mb-3`}>
+            {!isSalary && (
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>จำนวน ฿</label>
+                <input type="number" value={form.amount} onChange={e => set("amount", e.target.value)} placeholder="0.00" min="0" />
+              </div>
+            )}
             <div>
               <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>ประเภทรายการ</label>
               <select value={form.scenId} onChange={e => handleScenChange(e.target.value)}>
@@ -425,12 +555,24 @@ export default function JournalPage() {
                   <option value="home">🏠 สินเชื่อบ้าน</option>
                   <option value="car">🚗 สินเชื่อรถ</option>
                   <option value="personal">💼 เงินกู้ส่วนบุคคล</option>
+                  <option value="welfare_coop">🤝 เงินกู้สวัสดิการ-สหกรณ์ออมทรัพย์</option>
+                  <option value="welfare_home">🏡 เงินกู้สวัสดิการบ้าน (จากบริษัท)</option>
+                  <option value="welfare_car">🚙 เงินกู้สวัสดิการรถ (จากบริษัท)</option>
+                  <option value="welfare_other">📋 เงินกู้สวัสดิการอื่นๆ</option>
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>ชื่อสินเชื่อ / ธนาคาร</label>
                 <input type="text" value={loanName} onChange={e => setLoanName(e.target.value)}
-                  placeholder={loanType === "home" ? "เช่น บ้านรังสิต — ออมสิน..." : loanType === "car" ? "เช่น Toyota Yaris — KBank..." : "เช่น สินเชื่อ SCB Easy..."}
+                  placeholder={
+                    loanType === "home"          ? "เช่น บ้านรังสิต — ออมสิน..." :
+                    loanType === "car"           ? "เช่น Toyota Yaris — KBank..." :
+                    loanType === "welfare_coop"  ? "เช่น สหกรณ์ออมทรัพย์ ปตท..." :
+                    loanType === "welfare_home"  ? "เช่น สวัสดิการบ้านบริษัท ABC..." :
+                    loanType === "welfare_car"   ? "เช่น สวัสดิการรถบริษัท ABC..." :
+                    loanType === "welfare_other" ? "เช่น เงินกู้ฉุกเฉิน บริษัท..." :
+                    "เช่น สินเชื่อ SCB Easy..."
+                  }
                   style={{ textAlign: "left" }} />
               </div>
             </div>
@@ -571,8 +713,138 @@ export default function JournalPage() {
             </div>
           )}
 
+          {/* Salary compound form */}
+          {isSalary && (
+            <div className="mb-3 rounded-lg p-3" style={{ background: "#0a1628", border: "0.5px solid #1e3050" }}>
+              <p className="text-xs font-medium mb-3" style={{ color: "#86efac" }}>📥 รายได้ (Earnings) — ลง CR เงินเดือน 4100</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-3">
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: "#455672" }}>เงินเดือนพื้นฐาน *</label>
+                  <input type="number" value={salForm.base} onChange={e => setSal("base", e.target.value)} placeholder={phStr(lastSalary?.gross || 0) || "0.00"} min="0" />
+                </div>
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: "#455672" }}>OT</label>
+                  <input type="number" value={salForm.ot} onChange={e => setSal("ot", e.target.value)} placeholder="0.00" min="0" />
+                </div>
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: "#455672" }}>ค่าน้ำมัน/เดินทาง</label>
+                  <input type="number" value={salForm.allow_fuel} onChange={e => setSal("allow_fuel", e.target.value)} placeholder="0.00" min="0" />
+                </div>
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: "#455672" }}>ค่าโทรศัพท์</label>
+                  <input type="number" value={salForm.allow_phone} onChange={e => setSal("allow_phone", e.target.value)} placeholder="0.00" min="0" />
+                </div>
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: "#455672" }}>ค่าตำแหน่ง/อื่นๆ</label>
+                  <input type="number" value={salForm.allow_pos} onChange={e => setSal("allow_pos", e.target.value)} placeholder="0.00" min="0" />
+                </div>
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: "#455672" }}>โบนัส</label>
+                  <input type="number" value={salForm.bonus} onChange={e => setSal("bonus", e.target.value)} placeholder="0.00" min="0" />
+                </div>
+              </div>
+
+              <p className="text-xs font-medium mb-2" style={{ color: "#fca5a5" }}>📤 รายการหักจากสลิป</p>
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: "#455672" }}>ภาษีหัก ณ ที่จ่าย</label>
+                  <input type="number" value={salForm.tax} onChange={e => setSal("tax", e.target.value)} placeholder={phStr(lastSalary?.tax || 0) || "0.00"} min="0" />
+                  <div className="text-xs mt-0.5" style={{ color: "#334155" }}>→ DR 5030</div>
+                </div>
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: "#455672" }}>ประกันสังคม-ลูกจ้าง</label>
+                  <input type="number" value={salForm.ss_emp} onChange={e => setSal("ss_emp", e.target.value)} placeholder={phStr(lastSalary?.ss_emp || 0) || "0.00"} min="0" />
+                  <div className="text-xs mt-0.5" style={{ color: "#334155" }}>→ DR 1240 (asset)</div>
+                </div>
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: "#455672" }}>PVD-ลูกจ้าง</label>
+                  <input type="number" value={salForm.pvd_emp} onChange={e => setSal("pvd_emp", e.target.value)} placeholder={phStr(lastSalary?.pvd_emp || 0) || "0.00"} min="0" />
+                  <div className="text-xs mt-0.5" style={{ color: "#334155" }}>→ DR 1230 (asset)</div>
+                </div>
+              </div>
+
+              <div className="mb-3">
+                <div className="flex justify-between items-center mb-2">
+                  <p className="text-xs font-medium" style={{ color: "#fca5a5" }}>💳 หักเงินกู้/หนี้สิน (เลือกได้หลายรายการ)</p>
+                  <button type="button" onClick={() => setSalLoans(p => [...p, { id: String(Date.now()), loanId: "", amount: "" }])}
+                    className="text-xs px-2 py-1 rounded" style={{ background: "#0f1828", color: "#60a5fa", border: "0.5px solid #2563eb44" }}>
+                    + เพิ่มรายการ
+                  </button>
+                </div>
+                {salLoans.length === 0 && <div className="text-xs px-2 py-1.5 rounded" style={{ background: "#0f1828", color: "#455672" }}>ไม่มีรายการหักหนี้สิน</div>}
+                {salLoans.map(row => (
+                  <div key={row.id} className="grid grid-cols-12 gap-2 mb-1.5 items-end">
+                    <div className="col-span-7">
+                      <select value={row.loanId} onChange={e => setSalLoans(p => p.map(r => r.id === row.id ? { ...r, loanId: e.target.value } : r))}>
+                        <option value="">— เลือกหนี้สิน —</option>
+                        {salaryLoanPool.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="col-span-4">
+                      <input type="number" value={row.amount} onChange={e => setSalLoans(p => p.map(r => r.id === row.id ? { ...r, amount: e.target.value } : r))} placeholder="0.00" min="0" />
+                    </div>
+                    <button type="button" onClick={() => setSalLoans(p => p.filter(r => r.id !== row.id))}
+                      className="col-span-1 text-xs px-1 py-1.5 rounded" style={{ color: "#ef4444", border: "0.5px solid #ef444433" }}>✕</button>
+                  </div>
+                ))}
+                {salaryLoanPool.length === 0 && (
+                  <div className="text-xs mt-1 px-2 py-1.5 rounded" style={{ background: "#1a0800", color: "#fb923c", borderLeft: "2px solid #fb923c" }}>
+                    ยังไม่มีหนี้สินในระบบ — บันทึกผ่าน Opening Balance ก่อนถ้าต้องการหักเงินกู้สวัสดิการ/สหกรณ์
+                  </div>
+                )}
+              </div>
+
+              <p className="text-xs font-medium mb-2" style={{ color: "#86efac" }}>🏢 นายจ้างสมทบ — ลงเป็นทรัพย์สินเพิ่ม (ไม่หักจาก net pay)</p>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: "#455672" }}>ประกันสังคม-นายจ้างสมทบ</label>
+                  <input type="number" value={salForm.ss_er} onChange={e => setSal("ss_er", e.target.value)} placeholder={phStr(lastSalary?.ss_er || 0) || "0.00"} min="0" />
+                  <div className="text-xs mt-0.5" style={{ color: "#334155" }}>→ DR 1240, CR 4150 (รายได้สมทบ)</div>
+                </div>
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: "#455672" }}>PVD-นายจ้างสมทบ</label>
+                  <input type="number" value={salForm.pvd_er} onChange={e => setSal("pvd_er", e.target.value)} placeholder={phStr(lastSalary?.pvd_er || 0) || "0.00"} min="0" />
+                  <div className="text-xs mt-0.5" style={{ color: "#334155" }}>→ DR 1230, CR 2310 (รับรู้ตอนถอน)</div>
+                </div>
+              </div>
+
+              <div className="mb-3">
+                <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>บัญชีที่รับเงินเดือน (net pay) *</label>
+                <select value={form.pmId} onChange={e => set("pmId", e.target.value)}>
+                  <option value="">— เลือก —</option>
+                  {salaryBankPool.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+                {salaryBankPool.length === 1 && (
+                  <div className="mt-1.5 text-xs px-2 py-1.5 rounded" style={{ background: "#1a0800", color: "#fb923c", borderLeft: "2px solid #fb923c" }}>
+                    ยังไม่มีบัญชีธนาคาร — บันทึกผ่าน Journal &gt; Opening Balance ก่อน
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <div className="rounded p-2" style={{ background: "#052e1644" }}>
+                  <div style={{ color: "#86efac" }}>Gross รวม</div>
+                  <div className="font-medium text-sm" style={{ color: "#22c55e" }}>{THB(salGross)}</div>
+                </div>
+                <div className="rounded p-2" style={{ background: "#2a000044" }}>
+                  <div style={{ color: "#fca5a5" }}>หักรวม</div>
+                  <div className="font-medium text-sm" style={{ color: "#ef4444" }}>{THB(salDeduct)}</div>
+                </div>
+                <div className="rounded p-2" style={{ background: "#0a1628" }}>
+                  <div style={{ color: "#93c5fd" }}>Net pay</div>
+                  <div className="font-medium text-sm" style={{ color: "#60a5fa" }}>{THB(salNet)}</div>
+                </div>
+              </div>
+              {lastSalary && (
+                <div className="mt-2 text-xs" style={{ color: "#334155" }}>
+                  💡 ครั้งก่อน ({lastSalary.date}): gross {THB(lastSalary.gross)} · ภาษี {THB(lastSalary.tax)} · ปกส. {THB(lastSalary.ss_emp)} · PVD {THB(lastSalary.pvd_emp)}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Normal PM selector */}
-          {!isObBank && !isCardSetup && !isLiabSetup && !isTransfer && !isCashAdvCC && !isCashAdvBNPL && !isCashAdvLoan && (
+          {!isObBank && !isCardSetup && !isLiabSetup && !isTransfer && !isCashAdvCC && !isCashAdvBNPL && !isCashAdvLoan && !isSalary && (
             <div className="mb-3">
               <label className="block text-xs font-medium mb-1" style={{ color: "#455672" }}>
                 {isDualPay ? "บัญชีธนาคารที่โอนจ่าย" : (scen?.pmLabel || "ช่องทาง")}{!needsPM && !isDualPay && " (ไม่จำเป็น)"}
