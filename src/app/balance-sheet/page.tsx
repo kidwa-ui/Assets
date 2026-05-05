@@ -37,7 +37,7 @@ export default function BalanceSheetPage() {
   const otherCATotal = otherCA.reduce((s, c) => s + g(c), 0);
   const caTotal    = cashBal + bankTotal + otherCATotal;
 
-  const INV = ["1210","1220"];
+  const INV = ["1210","1220","1230","1240"];
   const FIX = ["1310","1320","1330","1340","1350","1360"];
   const invTotal = INV.reduce((s,c) => s + g(c), 0);
   const fixTotal = FIX.reduce((s,c) => s + g(c), 0);
@@ -55,11 +55,20 @@ export default function BalanceSheetPage() {
   const homeLoans     = userLiabs.filter(l => l.type === "home");
   const carLoans      = userLiabs.filter(l => l.type === "car");
   const personalLoans = userLiabs.filter(l => l.type === "personal");
+  const welfareCoop   = userLiabs.filter(l => l.type === "welfare_coop");
+  const welfareHome   = userLiabs.filter(l => l.type === "welfare_home");
+  const welfareCar    = userLiabs.filter(l => l.type === "welfare_car");
+  const welfareOther  = userLiabs.filter(l => l.type === "welfare_other");
 
   const homeTotal     = homeLoans.reduce((s, l) => s + g(l.account_code), 0) + (homeLoans.length === 0 ? g("2210") : 0);
   const carTotal      = carLoans.reduce((s, l) => s + g(l.account_code), 0) + (carLoans.length === 0 ? g("2220") : 0);
   const personalTotal = personalLoans.reduce((s, l) => s + g(l.account_code), 0) + (personalLoans.length === 0 ? g("2230") : 0);
-  const nclTotal      = homeTotal + carTotal + personalTotal;
+  const welfareCoopTotal  = welfareCoop.reduce((s, l) => s + g(l.account_code), 0)  + (welfareCoop.length === 0  ? g("2240") : 0);
+  const welfareHomeTotal  = welfareHome.reduce((s, l) => s + g(l.account_code), 0)  + (welfareHome.length === 0  ? g("2250") : 0);
+  const welfareCarTotal   = welfareCar.reduce((s, l) => s + g(l.account_code), 0)   + (welfareCar.length === 0   ? g("2260") : 0);
+  const welfareOtherTotal = welfareOther.reduce((s, l) => s + g(l.account_code), 0) + (welfareOther.length === 0 ? g("2270") : 0);
+  const pvdDeferred   = g("2310");
+  const nclTotal      = homeTotal + carTotal + personalTotal + welfareCoopTotal + welfareHomeTotal + welfareCarTotal + welfareOtherTotal + pvdDeferred;
 
   return (
     <AppShell netWorth={totalEquity} netIncome={netIncome} balanced={balanced}>
@@ -173,6 +182,55 @@ export default function BalanceSheetPage() {
               ) : (
                 <BSRow label={COA["2230"]?.name} val={g("2230")} indent color="#fca5a5" />
               )
+            )}
+
+            {/* สวัสดิการ-สหกรณ์ */}
+            {welfareCoopTotal > 0 && (
+              welfareCoop.length > 0 ? (
+                <BSCollapsibleGroup label="🤝 เงินกู้สวัสดิการ-สหกรณ์" total={welfareCoopTotal} groupKey="wcoop" collapsed={!!collapsed.wcoop} onToggle={toggle}>
+                  {welfareCoop.map(l => g(l.account_code) ? <BSRow key={l.id} label={l.name} val={g(l.account_code)} indent color="#fca5a5" /> : null)}
+                </BSCollapsibleGroup>
+              ) : (
+                <BSRow label={COA["2240"]?.name} val={g("2240")} indent color="#fca5a5" />
+              )
+            )}
+
+            {/* สวัสดิการบ้าน */}
+            {welfareHomeTotal > 0 && (
+              welfareHome.length > 0 ? (
+                <BSCollapsibleGroup label="🏡 เงินกู้สวัสดิการบ้าน" total={welfareHomeTotal} groupKey="whome" collapsed={!!collapsed.whome} onToggle={toggle}>
+                  {welfareHome.map(l => g(l.account_code) ? <BSRow key={l.id} label={l.name} val={g(l.account_code)} indent color="#fca5a5" /> : null)}
+                </BSCollapsibleGroup>
+              ) : (
+                <BSRow label={COA["2250"]?.name} val={g("2250")} indent color="#fca5a5" />
+              )
+            )}
+
+            {/* สวัสดิการรถ */}
+            {welfareCarTotal > 0 && (
+              welfareCar.length > 0 ? (
+                <BSCollapsibleGroup label="🚙 เงินกู้สวัสดิการรถ" total={welfareCarTotal} groupKey="wcar" collapsed={!!collapsed.wcar} onToggle={toggle}>
+                  {welfareCar.map(l => g(l.account_code) ? <BSRow key={l.id} label={l.name} val={g(l.account_code)} indent color="#fca5a5" /> : null)}
+                </BSCollapsibleGroup>
+              ) : (
+                <BSRow label={COA["2260"]?.name} val={g("2260")} indent color="#fca5a5" />
+              )
+            )}
+
+            {/* สวัสดิการอื่นๆ */}
+            {welfareOtherTotal > 0 && (
+              welfareOther.length > 0 ? (
+                <BSCollapsibleGroup label="📋 เงินกู้สวัสดิการอื่นๆ" total={welfareOtherTotal} groupKey="wother" collapsed={!!collapsed.wother} onToggle={toggle}>
+                  {welfareOther.map(l => g(l.account_code) ? <BSRow key={l.id} label={l.name} val={g(l.account_code)} indent color="#fca5a5" /> : null)}
+                </BSCollapsibleGroup>
+              ) : (
+                <BSRow label={COA["2270"]?.name} val={g("2270")} indent color="#fca5a5" />
+              )
+            )}
+
+            {/* รายได้ PVD รอการรับรู้ (deferred) */}
+            {pvdDeferred > 0 && (
+              <BSRow label={COA["2310"]?.name} val={pvdDeferred} indent color="#fca5a5" />
             )}
 
             <BSSubtotal label="รวมหนี้สินไม่หมุนเวียน" val={nclTotal} color="#ef4444" />
