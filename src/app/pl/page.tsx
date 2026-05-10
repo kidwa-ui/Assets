@@ -1,19 +1,40 @@
 "use client";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { useFinance } from "@/lib/useFinance";
-import { COA, netBal, THB } from "@/lib/balance";
+import { COA, netBal, THB, calcSummary } from "@/lib/balance";
 
 const EXP_SUB_CODES = ["5001","5002","5003","5004","5005","5006","5007","5008","5009","5010","5011","5012","5013","5014","5015","5016","5017"];
 const EXP_OTHER_CODES = ["5000"];
 const EXP_FIXED_CODES = ["5510","5520","5530"];
 
-export default function PLPage() {
-  const { summary, loading } = useFinance();
-  const [expCollapsed, setExpCollapsed] = useState(true);
-  if (loading || !summary) return <AppShell><div className="text-sm" style={{ color: "#455672" }}>กำลังโหลด...</div></AppShell>;
+const TH_MONTHS = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+const fmtMonth = (ym: string) => {
+  const [y, m] = ym.split("-").map(Number);
+  return `${TH_MONTHS[m - 1]} ${(y + 543) % 100}`;
+};
 
-  const { balances, totalInc, totalExp, netIncome, totalEquity, balanced } = summary;
+export default function PLPage() {
+  const { summary, txns, loading } = useFinance();
+  const [expCollapsed, setExpCollapsed] = useState(true);
+  const [selectedMonth, setSelectedMonth] = useState<string>("all"); // "all" | "YYYY-MM"
+
+  const months = useMemo(() => {
+    const set = new Set<string>();
+    txns.forEach(t => { if (t.date) set.add(t.date.slice(0, 7)); });
+    return Array.from(set).sort();
+  }, [txns]);
+
+  const view = useMemo(() => {
+    if (selectedMonth === "all" || !summary) return summary;
+    const filtered = txns.filter(t => t.date.slice(0, 7) === selectedMonth);
+    return calcSummary(filtered);
+  }, [selectedMonth, txns, summary]);
+
+  if (loading || !summary || !view) return <AppShell><div className="text-sm" style={{ color: "#455672" }}>กำลังโหลด...</div></AppShell>;
+
+  const { balances, totalInc, totalExp, netIncome } = view;
+  const { totalEquity, balanced } = summary;
   const g = (c: string) => netBal(balances, c);
 
   const incGroups = [
@@ -30,9 +51,48 @@ export default function PLPage() {
   const activeOther = EXP_OTHER_CODES.filter(c => g(c) > 0);
   const activeFixed = EXP_FIXED_CODES.filter(c => g(c) > 0);
 
+  const periodLabel = selectedMonth === "all" ? "สะสมทั้งหมด" : fmtMonth(selectedMonth);
+
   return (
-    <AppShell netWorth={totalEquity} netIncome={netIncome} balanced={balanced}>
-      <h1 className="text-base font-medium text-white mb-4">📈 P&L / งบกำไรขาดทุน</h1>
+    <AppShell netWorth={totalEquity} netIncome={summary.netIncome} balanced={balanced}>
+      <h1 className="text-base font-medium text-white mb-3">📈 P&L / งบกำไรขาดทุน</h1>
+
+      {/* Period filter */}
+      <div className="rounded-xl p-3 mb-4" style={{ background: "#0b1220", border: "0.5px solid #16243a" }}>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xs font-medium" style={{ color: "#455672" }}>📅 ช่วงเวลา:</span>
+          <span className="text-xs" style={{ color: "#93c5fd" }}>{periodLabel}</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            onClick={() => setSelectedMonth("all")}
+            className="px-2.5 py-1 text-xs rounded-md font-medium"
+            style={{
+              background: selectedMonth === "all" ? "#1e3a8a" : "#0f1828",
+              color: selectedMonth === "all" ? "#fff" : "#93a4be",
+              border: "0.5px solid " + (selectedMonth === "all" ? "#1e3a8a" : "#16243a"),
+            }}
+          >สะสมทั้งหมด</button>
+          {months.map(ym => {
+            const active = selectedMonth === ym;
+            return (
+              <button
+                key={ym}
+                onClick={() => setSelectedMonth(ym)}
+                className="px-2.5 py-1 text-xs rounded-md font-medium"
+                style={{
+                  background: active ? "#1e3a8a" : "#0f1828",
+                  color: active ? "#fff" : "#93a4be",
+                  border: "0.5px solid " + (active ? "#1e3a8a" : "#16243a"),
+                }}
+              >{fmtMonth(ym)}</button>
+            );
+          })}
+          {months.length === 0 && (
+            <span className="text-xs" style={{ color: "#455672" }}>ยังไม่มีรายการ</span>
+          )}
+        </div>
+      </div>
 
       {/* Income */}
       <div className="rounded-xl overflow-hidden mb-4" style={{ background: "#0b1220", border: "0.5px solid #16243a" }}>
@@ -112,11 +172,15 @@ export default function PLPage() {
 
       {/* Net */}
       <div className="rounded-xl p-5 text-center" style={{ background: "#0b1220", border: "0.5px solid #16243a" }}>
-        <div className="text-xs mb-1" style={{ color: "#455672" }}>กำไร (ขาดทุน) สุทธิ / Net Income</div>
+        <div className="text-xs mb-1" style={{ color: "#455672" }}>
+          กำไร (ขาดทุน) {selectedMonth === "all" ? "สุทธิ" : `ของ ${periodLabel}`} / Net Income
+        </div>
         <div className="text-3xl font-bold" style={{ color: netIncome >= 0 ? "#22c55e" : "#ef4444" }}>
           {netIncome < 0 ? "-" : "+"}฿{THB(Math.abs(netIncome)).replace("฿","")}
         </div>
-        <div className="text-xs mt-1" style={{ color: "#455672" }}>→ ส่งเข้างบดุล Equity อัตโนมัติ</div>
+        <div className="text-xs mt-1" style={{ color: "#455672" }}>
+          {selectedMonth === "all" ? "→ ส่งเข้างบดุล Equity อัตโนมัติ" : "→ ผลรวมของเดือนนี้"}
+        </div>
       </div>
     </AppShell>
   );

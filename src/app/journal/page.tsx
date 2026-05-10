@@ -97,6 +97,8 @@ export default function JournalPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ date: "", desc: "", amount: "" });
   const [editSaving, setEditSaving] = useState(false);
+  const [filterAcct, setFilterAcct] = useState<string>("");
+  const [filterSide, setFilterSide] = useState<"all" | "dr" | "cr">("all");
   const [form, setForm] = useState({ date: "", desc: "", scenId: "", pmId: "", amount: "" });
   // ob_bank
   const [bankName, setBankName] = useState("");
@@ -424,6 +426,25 @@ export default function JournalPage() {
   }
 
   if (loading || !summary) return <AppShell><div className="text-sm" style={{ color: "#455672" }}>กำลังโหลด...</div></AppShell>;
+
+  const acctNameOf = (code: string): string => {
+    if (COA[code]) return COA[code].name;
+    const b = userBanks.find(x => x.account_code === code);
+    if (b) return `${b.name} (${BANK_TYPES[b.type] ?? b.type})`;
+    const c = ccCards.find(x => x.account_code === code);
+    if (c) return `${c.card_type === "bnpl" ? "🛒" : "💳"} ${c.name}`;
+    const l = userLiabs.find(x => x.account_code === code);
+    if (l) return l.name;
+    return code;
+  };
+  const acctCodesInUse = Array.from(new Set(txns.flatMap(t => [t.dr_account, t.cr_account]))).sort();
+  const filteredTxns = filterAcct
+    ? txns.filter(t => {
+        if (filterSide === "dr") return t.dr_account === filterAcct;
+        if (filterSide === "cr") return t.cr_account === filterAcct;
+        return t.dr_account === filterAcct || t.cr_account === filterAcct;
+      })
+    : txns;
 
   const dualPayCard = isDualPay ? ccCards.find(c => c.id === payCardId) : null;
   const dualPayBank = isDualPay ? resolvePM(form.pmId, ccCards, userBanks) : null;
@@ -1023,6 +1044,46 @@ export default function JournalPage() {
         </div>
       )}
 
+      {/* Filter bar */}
+      <div className="rounded-xl p-3 mb-3 flex flex-wrap gap-2 items-center" style={{ background: "#0b1220", border: "0.5px solid #16243a" }}>
+        <span className="text-xs font-medium" style={{ color: "#455672" }}>🔎 กรอง:</span>
+        <select
+          value={filterAcct}
+          onChange={e => setFilterAcct(e.target.value)}
+          style={{ minWidth: 220 }}
+        >
+          <option value="">— ทุกบัญชี —</option>
+          {acctCodesInUse.map(c => (
+            <option key={c} value={c}>{c} — {acctNameOf(c)}</option>
+          ))}
+        </select>
+        <div className="inline-flex rounded-lg overflow-hidden" style={{ border: "0.5px solid #16243a" }}>
+          {(["all","dr","cr"] as const).map(side => {
+            const active = filterSide === side;
+            const label = side === "all" ? "ทั้งหมด" : side === "dr" ? "Dr" : "Cr";
+            const bg = active ? (side === "dr" ? "#1e3a8a" : side === "cr" ? "#7f1d1d" : "#334155") : "#0f1828";
+            const color = active ? "#fff" : "#93a4be";
+            return (
+              <button
+                key={side}
+                onClick={() => setFilterSide(side)}
+                disabled={!filterAcct && side !== "all"}
+                className="px-3 py-1.5 text-xs font-medium"
+                style={{ background: bg, color, opacity: !filterAcct && side !== "all" ? 0.4 : 1, cursor: !filterAcct && side !== "all" ? "not-allowed" : "pointer" }}
+              >{label}</button>
+            );
+          })}
+        </div>
+        {(filterAcct || filterSide !== "all") && (
+          <button
+            onClick={() => { setFilterAcct(""); setFilterSide("all"); }}
+            className="px-2 py-1 text-xs rounded"
+            style={{ color: "#93a4be", border: "0.5px solid #16243a" }}
+          >ล้าง</button>
+        )}
+        <span className="ml-auto text-xs" style={{ color: "#455672" }}>{filteredTxns.length} / {txns.length} รายการ</span>
+      </div>
+
       {/* Table */}
       <div className="rounded-xl overflow-hidden" style={{ background: "#0b1220", border: "0.5px solid #16243a" }}>
         <div className="overflow-x-auto">
@@ -1033,9 +1094,9 @@ export default function JournalPage() {
               ))}</tr>
             </thead>
             <tbody>
-              {txns.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-6 text-sm text-center" style={{ color: "#455672" }}>ยังไม่มีรายการ</td></tr>
-              ) : [...txns].reverse().map((t, i) => (
+              {filteredTxns.length === 0 ? (
+                <tr><td colSpan={6} className="px-4 py-6 text-sm text-center" style={{ color: "#455672" }}>{txns.length === 0 ? "ยังไม่มีรายการ" : "ไม่พบรายการตรงตามตัวกรอง"}</td></tr>
+              ) : [...filteredTxns].reverse().map((t, i) => (
                 <React.Fragment key={t.id}>
                   <tr style={{ background: i % 2 === 0 ? "transparent" : "#0f1828" }}>
                     <td className="px-3 py-2 text-xs whitespace-nowrap" style={{ color: "#455672" }}>{t.date}</td>
