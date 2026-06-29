@@ -33,12 +33,19 @@ export default function BalanceSheetPage() {
   const cashBal    = g("1110");
   const bankBals   = userBanks.map(b => ({ ...b, bal: g(b.account_code) }));
   const bankTotal  = bankBals.reduce((s, b) => s + b.bal, 0);
-  const otherCA    = ["1130","1140","1150"];
+  // Derive asset code lists straight from the COA so no account type ever drops out of
+  // the breakdown (e.g. 1120 เงินฝากธนาคาร, credited by every loan/CC payment, was missing).
+  const bankCodeSet = new Set(userBanks.map(b => b.account_code));
+  const assetCodesBySubtype = (sub: string) =>
+    Object.keys(COA)
+      .filter(c => COA[c].type === "asset" && COA[c].subtype === sub && c !== "1110" && !bankCodeSet.has(c))
+      .sort();
+  const otherCA    = assetCodesBySubtype("current"); // 1120,1130,1140,1150 (+ any future current asset)
   const otherCATotal = otherCA.reduce((s, c) => s + g(c), 0);
   const caTotal    = cashBal + bankTotal + otherCATotal;
 
-  const INV = ["1210","1220","1230","1240"];
-  const FIX = ["1310","1320","1330","1340","1350","1360"];
+  const INV = assetCodesBySubtype("invest"); // 1210,1220,1230,1240
+  const FIX = assetCodesBySubtype("fixed");  // 1310..1360
   const invTotal = INV.reduce((s,c) => s + g(c), 0);
   const fixTotal = FIX.reduce((s,c) => s + g(c), 0);
 
