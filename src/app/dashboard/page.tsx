@@ -61,13 +61,16 @@ export default function DashboardPage() {
     "1110", "1120", "1130",
     ...userBanks.map(b => b.account_code),
   ].reduce((s, c) => s + g(c), 0);
-  const investTotal = g("1210") + g("1220");
+  const investTotal = ["1210","1220","1230","1240"].reduce((s, c) => s + g(c), 0);
   const fixedTotal  = ["1310","1320","1330","1340","1350","1360"].reduce((s, c) => s + g(c), 0);
+  // Catch-all so the pie reconciles to totalAssets (e.g. receivables 1140 / prepaid 1150).
+  const otherAssetTotal = totalAssets - cashBankTotal - investTotal - fixedTotal;
   const assetPieces = [
     { name: "เงินสด / ธนาคาร", value: cashBankTotal },
     { name: "การลงทุน",         value: investTotal   },
     { name: "สินทรัพย์ถาวร",   value: fixedTotal    },
-  ].filter(p => p.value > 0);
+    { name: "อื่นๆ",            value: otherAssetTotal },
+  ].filter(p => p.value > 0.005);
 
   // Liabilities
   const ccTotal       = ccCards.filter(c => c.card_type === "credit").reduce((s, c) => s + g(c.account_code), 0);
@@ -78,14 +81,23 @@ export default function DashboardPage() {
   const homeTotal     = homeLoans.length     > 0 ? homeLoans.reduce((s, l)     => s + g(l.account_code), 0) : g("2210");
   const carTotal      = carLoans.length      > 0 ? carLoans.reduce((s, l)      => s + g(l.account_code), 0) : g("2220");
   const personalTotal = personalLoans.length > 0 ? personalLoans.reduce((s, l) => s + g(l.account_code), 0) : g("2230");
+  // Welfare loans (user-defined codes + legacy parent codes) — were absent from the list entirely.
+  const welfareTypes  = ["welfare_coop","welfare_home","welfare_car","welfare_other"];
+  const welfareTotal  = userLiabs.filter(l => welfareTypes.includes(l.type)).reduce((s, l) => s + g(l.account_code), 0)
+    + ["2240","2250","2260","2270"].reduce((s, c) => s + g(c), 0);
 
   const liabItems = [
-    ccTotal > 0       && { label: "บัตรเครดิต",        val: ccTotal       },
-    bnplTotal > 0     && { label: "BNPL",               val: bnplTotal     },
-    homeTotal > 0     && { label: COA["2210"]?.name,    val: homeTotal     },
-    carTotal > 0      && { label: COA["2220"]?.name,    val: carTotal      },
-    personalTotal > 0 && { label: COA["2230"]?.name,    val: personalTotal },
+    ccTotal > 0       && { label: "บัตรเครดิต",          val: ccTotal       },
+    bnplTotal > 0     && { label: "BNPL",                 val: bnplTotal     },
+    homeTotal > 0     && { label: COA["2210"]?.name,      val: homeTotal     },
+    carTotal > 0      && { label: COA["2220"]?.name,      val: carTotal      },
+    personalTotal > 0 && { label: COA["2230"]?.name,      val: personalTotal },
+    welfareTotal > 0  && { label: "เงินกู้สวัสดิการ",      val: welfareTotal  },
   ].filter(Boolean) as { label: string; val: number }[];
+  // Catch-all so the list reconciles to totalLiab (e.g. 2130, 2140 current, 2310 PVD-deferred).
+  const shownLiab = liabItems.reduce((s, it) => s + it.val, 0);
+  const otherLiab = totalLiab - shownLiab;
+  if (otherLiab > 0.005) liabItems.push({ label: "อื่นๆ", val: otherLiab });
 
   const stats = [
     { label: "สินทรัพย์รวม",     value: totalAssets, color: "#22c55e" },
